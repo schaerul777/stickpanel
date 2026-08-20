@@ -1,0 +1,11 @@
+/* ── StickPanel Design System ─────────────────────────────────────────────────
+   This file is imported by the root index.css as the user's custom styles entry
+   point. It forwards to the font and theme layers so all CSS variables and
+   typefaces are available throughout the application.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Geist font face (CDN) */
+@import './fonts.css';
+
+/* CSS custom properties – colors, radii, spacing, typography scale */
+@import './theme.css';

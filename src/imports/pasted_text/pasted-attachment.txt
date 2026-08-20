@@ -1,0 +1,109 @@
+# Lynx Admin — Campaign Details Drawer: Content Update Prompt
+
+This updates the **existing** Campaign Details Drawer (opened via the "View" action on a child row in QC → Campaign Report). The header, the 2x2 info tile group, and the flag/severity/status tag pills already exist and are correct — do not rebuild them. This prompt only covers the deltas and new sections below.
+
+Design system stays as previously specified: Geist font, existing custom kit components, primary `#002933`, secondary/accent `#70E8E8`, neutral black body text.
+
+---
+
+## 1. Info Tiles — Add "Slots"
+
+Add one more data point to the info tile group: **Slots** — how many slots are defined for this inventory.
+
+- Conventional inventory: always `1` (fixed).
+- Digital inventory: variable, pulled from the system (e.g. 4, 6, 8).
+
+This takes the tile group from 4 to 5 data points. Restructure the grid to a **3 + 2 layout** (three tiles in the first row, two in the second) rather than leaving an awkward gap in a strict 2x2 — reflow the existing four tiles plus the new "Slots" tile into that arrangement, keeping their current individual tile styling.
+
+---
+
+## 2. Chart Section
+
+- Rename the chart title to **"Inventory Trend."**
+- Default time range: **30 days.**
+- Chart type: **line chart**, using ApexCharts' zoomable timeseries pattern (draggable zoom/brush on the x-axis, reset-zoom control).
+- Three series, one line per day for each:
+  1. **Current Imp**
+  2. **Suggested Imp**
+  3. **Published Imp**
+- Legend distinguishes the three lines; keep line colors visually distinct from the severity/status tag palette so they aren't misread as status indicators.
+- Where **Published Imp** has no value yet for a given day (item not yet published), that line simply has no data point for that day rather than plotting a zero — it should visibly pick up only once publishing starts.
+
+---
+
+## 3. Dataset Table
+
+Columns: **Metric | Current Imp | Suggested Imp | Published Imp**
+Rows: **Impression | Reach | Frequency**
+
+- All values are system-calculated and auto-filled — this table has no manual input.
+- **Published Imp / Reach / Frequency show `—`** for any row where the item hasn't been published yet (i.e. status isn't `Published`) or is currently escalated/under investigation.
+- Since this data is system-calculated, include a subtle loading/skeleton state for the table while the calculation is pending, in case it isn't instantaneous.
+
+---
+
+## 4. Confidence Level
+
+Directly below the dataset table, show:
+
+- **Confidence level**, as a percentage (e.g. "87%").
+- Label beneath or beside it: **"Baseline: Same weekday last week"** — this names what the confidence figure is measured against.
+
+---
+
+## 5. Status & Action Model
+
+The drawer's action area changes based on the item's current **status** and **severity**. Only one primary action is shown at a time, matching the state the item is actually in — don't show an action that isn't valid yet.
+
+**Full lifecycle:**
+
+`Need Review` (Normal/Mild) → **Publish** → `Published`
+`Need Review` (Critical) → **Escalate to Data Ops** → `Investigating` → **Mark as Resolved** → `Resolved` → **Publish** → `Published`
+
+Notes on this flow:
+- The QC/Ops reviewer performs every UI action in this drawer — **Publish, Escalate, and Mark as Resolved are all actions the same reviewer takes**, not Data Ops. Data Ops fixes the underlying data issue outside this tool (backend/manual correction); the reviewer marks the item Resolved once they've confirmed that fix happened.
+- `Resolved` re-enables the same **Publish** action as the Normal/Mild fast path — it's the same action and the same fields, just reached via the escalation route.
+- `Published` is terminal: no actions remain, fields become read-only.
+
+### Per-state action area
+
+| Status | Severity | Action shown | Fields |
+|---|---|---|---|
+| Need Review | Normal / Mild | **Publish** | Published Imp (editable), Reach, Freq — all pre-filled |
+| Need Review | Critical | **Escalate to Data Ops** | Same 3 fields shown read-only as reference; not editable pre-investigation |
+| Investigating | — | **Mark as Resolved** | Escalation context shown read-only (who it was escalated to, reason, notes, date); Published fields hidden or disabled |
+| Resolved | — | **Publish** | Same 3 fields, editable again, reflecting refreshed system-suggested values |
+| Published | — | None — read-only confirmation | Final published values shown, locked, with published date/by-whom |
+
+---
+
+## 6. Fields
+
+**Published Imp / Published Reach / Published Freq**
+- All three are auto-filled by the system with the suggested values.
+- Only **Published Imp** is editable — the reviewer can adjust it before publishing. Reach and Frequency stay read-only regardless.
+
+**Assign to Data Ops** (person-picker)
+- Only appears as part of the Escalate action.
+- Required when escalating — the reviewer must pick a specific Data Ops person.
+- Once escalated, this stays visible (read-only) in the Investigating and later states as a record of who it was routed to.
+
+**Reason** (dropdown)
+- Optional for both Publish and Escalate.
+- Draft option set (placeholder — finalize with your team): Data source anomaly, Inventory technical issue, Seasonal/expected spike, Client-side campaign change, Insufficient data, Other.
+
+**Notes** (free text)
+- Optional for both Publish and Escalate. Also available as an optional field on Mark as Resolved, so Data Ops's fix can be summarized in the same trail.
+
+---
+
+## 7. States to Produce
+
+Design each of these as a distinct drawer state:
+
+1. Need Review, Normal/Mild — Publish action, editable fields
+2. Need Review, Critical — Escalate action, read-only reference fields, Assign-to-Data-Ops picker + optional Reason/Notes
+3. Investigating — escalation context shown read-only, Mark as Resolved action
+4. Resolved — Publish action again, editable fields
+5. Published — fully read-only, confirmation state with publish date/by-whom
+6. Dataset table loading/skeleton state (system calculation pending)
