@@ -4,6 +4,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   DollarSign, UsersRound, ShieldCheck,
   Database, MapPin, Building2, ClipboardCheck, BarChart2,
+  Boxes, MonitorPlay,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -46,6 +47,13 @@ const menuGroups: MenuItem[] = [
     subItems: [
       { name: 'Geolocation Filter', path: '/master/geolocation-filter', icon: MapPin    },
       { name: 'Cities',             path: '/master/cities',             icon: Building2 },
+    ],
+  },
+  {
+    name: 'Inventory',
+    icon: Boxes,
+    subItems: [
+      { name: 'Display', path: '/inventory/display', icon: MonitorPlay },
     ],
   },
   {

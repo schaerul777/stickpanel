@@ -3,6 +3,9 @@ packages:
 allowBuilds:
   '@tailwindcss/oxide': true
   esbuild: true
+  netlify-cli: true
+  sharp: true
+  unix-dgram: true
 supportedArchitectures:
   os:
     - linux

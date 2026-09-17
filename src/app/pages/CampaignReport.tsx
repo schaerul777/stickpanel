@@ -7,6 +7,7 @@ import {
   User, Calendar, Building, SlidersHorizontal, ShieldAlert,
   CheckCircle2, Lock, Send,
 } from 'lucide-react';
+import { useToast, ToastContainer, type ToastType } from '../components/Toast';
 
 const ReactApexChart = lazy(() => import('react-apexcharts'));
 
@@ -66,190 +67,137 @@ const REASONS = [
 ];
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
+// Dates are generated relative to the actual current date at runtime (offsets
+// from "today"), so the trailing 30-day window always has data for today no
+// matter when the prototype is opened — rather than drifting into an empty
+// dataset as fixed calendar dates fall further into the past.
+
+function dayOffsetDate(offsetDays: number): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - offsetDays);
+  return d;
+}
+
+function fmtSeedDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+interface ChildSpec {
+  id: string;
+  campaignName: string;
+  mediaPlanName: string;
+  flag: FlagType;
+  severity: SeverityType;
+  currentImpression: number;
+  suggestedImpression: number;
+}
+
+// Deterministically derives a realistic status/reviewer/publishedImpression for a
+// flagged row based on how many days old its inventory is: today's flagged items
+// are always freshly arrived and unworked (Need Review, unassigned); older items
+// have mostly already moved through the workflow toward Resolved/Published.
+function resolveChildState(
+  id: string, offsetDays: number, severity: SeverityType, suggestedImpression: number,
+): { status: StatusType; reviewer: string | null; publishedImpression: number | null } {
+  if (severity === 'Normal') {
+    return { status: 'Healthy', reviewer: null, publishedImpression: null };
+  }
+  if (offsetDays === 0) {
+    return { status: 'Need Review', reviewer: null, publishedImpression: null };
+  }
+  const seed = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  let status: StatusType;
+  if (offsetDays <= 3)       status = seed % 3 === 1 ? 'Investigating' : 'Need Review';
+  else if (offsetDays <= 14) status = (['Investigating', 'Resolved', 'Need Review', 'Published'] as const)[seed % 4];
+  else                       status = seed % 3 === 0 ? 'Resolved' : 'Published';
+
+  const reviewer = status === 'Need Review' ? null : REVIEWERS[seed % REVIEWERS.length];
+  const publishedImpression = status === 'Published' ? suggestedImpression : null;
+  return { status, reviewer, publishedImpression };
+}
+
+function buildInventory(
+  id: string, offsetDays: number, inventoryName: string, organization: string,
+  type: InventoryType, screenConnection: ScreenConnectionType, children: ChildSpec[],
+): InventoryRow {
+  const dateObj = dayOffsetDate(offsetDays);
+  return {
+    id, inventoryName, organization, type, screenConnection,
+    date: fmtSeedDate(dateObj),
+    dateObj,
+    children: children.map(c => ({ ...c, ...resolveChildState(c.id, offsetDays, c.severity, c.suggestedImpression) })),
+  };
+}
 
 const INITIAL_DATA: InventoryRow[] = [
-  // ── Today: Aug 6, 2026 ──────────────────────────────────────────────────────
-  {
-    id: 'inv-11',
-    inventoryName: 'Videotron Ancol Beach',
-    organization: 'Infini',
-    date: 'Aug 6, 2026',
-    dateObj: new Date('2026-08-06'),
-    type: 'Digital',
-    screenConnection: 'ScreenApp',
-    children: [
-      { id: 'c-11a', campaignName: 'Summer Refresh',   mediaPlanName: 'Media Plan T', flag: 'Spike',   severity: 'Critical', reviewer: null,           status: 'Need Review',   currentImpression: 8500,  suggestedImpression: 12000, publishedImpression: null  },
-      { id: 'c-11b', campaignName: 'Sports Brand Q3',  mediaPlanName: 'Media Plan U', flag: 'Drop',    severity: 'Mild',     reviewer: null,           status: 'Need Review',   currentImpression: 3200,  suggestedImpression: 5800,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-12',
-    inventoryName: 'Static Panel Kemayoran',
-    organization: 'Prisma',
-    date: 'Aug 6, 2026',
-    dateObj: new Date('2026-08-06'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-12a', campaignName: 'Education Campaign', mediaPlanName: 'Media Plan V', flag: 'N/A',     severity: 'Normal',   reviewer: null,           status: 'Healthy',       currentImpression: 15400, suggestedImpression: 18000, publishedImpression: null  },
-      { id: 'c-12b', campaignName: 'Lifestyle Brand',    mediaPlanName: 'Media Plan W', flag: 'Spike',   severity: 'Mild',     reviewer: 'Dewi Kusuma',  status: 'Published',     currentImpression: 22000, suggestedImpression: 24500, publishedImpression: 24500 },
-    ],
-  },
-  {
-    id: 'inv-13',
-    inventoryName: 'LED Screen Kuningan Tower',
-    organization: 'Infini',
-    date: 'Aug 6, 2026',
-    dateObj: new Date('2026-08-06'),
-    type: 'Digital',
-    screenConnection: 'HTML',
-    children: [
-      { id: 'c-13a', campaignName: 'Pharma Launch',   mediaPlanName: 'Media Plan X', flag: 'Drop',    severity: 'Critical', reviewer: null,            status: 'Need Review',   currentImpression: 1200,  suggestedImpression: 4000,  publishedImpression: null  },
-      { id: 'c-13b', campaignName: 'E-Commerce Sale', mediaPlanName: 'Media Plan Y', flag: 'Missing', severity: 'Mild',     reviewer: null,            status: 'Need Review',   currentImpression: 6700,  suggestedImpression: 9100,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-14',
-    inventoryName: 'Billboard MH Thamrin',
-    organization: 'Prisma',
-    date: 'Aug 6, 2026',
-    dateObj: new Date('2026-08-06'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-14a', campaignName: 'Bank Promo Aug', mediaPlanName: 'Media Plan Z', flag: 'N/A',   severity: 'Normal', reviewer: null,         status: 'Healthy',   currentImpression: 31200, suggestedImpression: 33000, publishedImpression: null },
-    ],
-  },
-  // ── Historical ───────────────────────────────────────────────────────────────
-  {
-    id: 'inv-1',
-    inventoryName: 'LED Videotron Kuningan',
-    organization: 'Infini',
-    date: 'Jul 1, 2026',
-    dateObj: new Date('2026-07-01'),
-    type: 'Digital',
-    screenConnection: 'API INTEGRATION',
-    children: [
-      { id: 'c-1a', campaignName: 'Q3 Beverage Launch', mediaPlanName: 'Media Plan A', flag: 'Spike',   severity: 'Critical', reviewer: null,          status: 'Need Review',   currentImpression: 8200,  suggestedImpression: 12400, publishedImpression: null  },
-      { id: 'c-1b', campaignName: 'Retail Promo July',  mediaPlanName: 'Media Plan B', flag: 'Drop',    severity: 'Mild',     reviewer: null,          status: 'Need Review',   currentImpression: 6500,  suggestedImpression: 9800,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-2',
-    inventoryName: 'Static Billboard Sudirman',
-    organization: 'Prisma',
-    date: 'Jul 1, 2026',
-    dateObj: new Date('2026-07-01'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-2a', campaignName: 'Brand Awareness Q3', mediaPlanName: 'Media Plan C', flag: 'Missing', severity: 'Critical', reviewer: 'Ahmad Rahman', status: 'Resolved', currentImpression: 14200, suggestedImpression: 16800, publishedImpression: null },
-    ],
-  },
-  {
-    id: 'inv-3',
-    inventoryName: 'Digital Signage Senayan',
-    organization: 'Infini',
-    date: 'Jun 30, 2026',
-    dateObj: new Date('2026-06-30'),
-    type: 'Digital',
-    screenConnection: 'ScreenApp',
-    children: [
-      { id: 'c-3a', campaignName: 'FMCG Summer',       mediaPlanName: 'Media Plan D', flag: 'Spike',   severity: 'Mild',   reviewer: 'Rina Safitri', status: 'Published',   currentImpression: 18500, suggestedImpression: 19200, publishedImpression: 19200 },
-      { id: 'c-3b', campaignName: 'Auto Lifestyle Q3', mediaPlanName: 'Media Plan E', flag: 'N/A', severity: 'Normal', reviewer: null,           status: 'Healthy', currentImpression: 22300, suggestedImpression: 23000, publishedImpression: null },
-      { id: 'c-3c', campaignName: 'Tech Brand',        mediaPlanName: 'Media Plan F', flag: 'N/A', severity: 'Normal', reviewer: null,           status: 'Healthy', currentImpression: 4100,  suggestedImpression: 7600,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-4',
-    inventoryName: 'LED Billboard Gatot Subroto',
-    organization: 'Prisma',
-    date: 'Jul 2, 2026',
-    dateObj: new Date('2026-07-02'),
-    type: 'Digital',
-    screenConnection: 'HTML',
-    children: [
-      { id: 'c-4a', campaignName: 'Consumer Goods', mediaPlanName: 'Media Plan G', flag: 'Drop',  severity: 'Critical', reviewer: null,           status: 'Need Review', currentImpression: 2800,  suggestedImpression: 5400,  publishedImpression: null },
-      { id: 'c-4b', campaignName: 'Finance Brand',  mediaPlanName: 'Media Plan H', flag: 'Spike', severity: 'Mild',     reviewer: null,           status: 'Need Review', currentImpression: 11200, suggestedImpression: 13500, publishedImpression: null },
-    ],
-  },
-  {
-    id: 'inv-5',
-    inventoryName: 'Static Billboard Thamrin',
-    organization: 'Infini',
-    date: 'Jul 2, 2026',
-    dateObj: new Date('2026-07-02'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-5a', campaignName: 'Insurance Q3', mediaPlanName: 'Media Plan I', flag: 'Missing', severity: 'Mild', reviewer: null, status: 'Need Review', currentImpression: 6800, suggestedImpression: 9200, publishedImpression: null },
-    ],
-  },
-  {
-    id: 'inv-6',
-    inventoryName: 'Videotron Bundaran HI',
-    organization: 'Infini',
-    date: 'Jul 3, 2026',
-    dateObj: new Date('2026-07-03'),
-    type: 'Digital',
-    screenConnection: 'API INTEGRATION',
-    children: [
-      { id: 'c-6a', campaignName: 'F&B Launch',   mediaPlanName: 'Media Plan J', flag: 'Spike',   severity: 'Critical', reviewer: 'Rina Safitri', status: 'Investigating', currentImpression: 3400,  suggestedImpression: 6700,  publishedImpression: null  },
-      { id: 'c-6b', campaignName: 'Travel Brand', mediaPlanName: 'Media Plan K', flag: 'N/A',    severity: 'Normal',   reviewer: null,           status: 'Healthy',       currentImpression: 17800, suggestedImpression: 18400, publishedImpression: null },
-      { id: 'c-6c', campaignName: 'Retail Chain', mediaPlanName: 'Media Plan L', flag: 'Missing', severity: 'Mild',     reviewer: null,           status: 'Need Review',   currentImpression: 5200,  suggestedImpression: 8100,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-7',
-    inventoryName: 'Static Billboard Sudirman North',
-    organization: 'Prisma',
-    date: 'Jul 3, 2026',
-    dateObj: new Date('2026-07-03'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-7a', campaignName: 'Banking App', mediaPlanName: 'Media Plan M', flag: 'N/A',   severity: 'Normal', reviewer: null,          status: 'Healthy',  currentImpression: 21600, suggestedImpression: 24000, publishedImpression: null },
-    ],
-  },
-  {
-    id: 'inv-8',
-    inventoryName: 'Digital Panel Kuningan City',
-    organization: 'Infini',
-    date: 'Jul 4, 2026',
-    dateObj: new Date('2026-07-04'),
-    type: 'Digital',
-    screenConnection: 'ScreenApp',
-    children: [
-      { id: 'c-8a', campaignName: 'Luxury Auto',     mediaPlanName: 'Media Plan N', flag: 'Drop',    severity: 'Critical', reviewer: null,           status: 'Need Review',   currentImpression: 1900,  suggestedImpression: 4200,  publishedImpression: null },
-      { id: 'c-8b', campaignName: 'Cosmetics Brand', mediaPlanName: 'Media Plan O', flag: 'Missing', severity: 'Mild',     reviewer: null,           status: 'Need Review',   currentImpression: 7300,  suggestedImpression: 11600, publishedImpression: null },
-    ],
-  },
-  {
-    id: 'inv-9',
-    inventoryName: 'Baliho Semanggi',
-    organization: 'Prisma',
-    date: 'Jul 4, 2026',
-    dateObj: new Date('2026-07-04'),
-    type: 'Conventional',
-    screenConnection: 'N/A',
-    children: [
-      { id: 'c-9a', campaignName: 'National Bank',      mediaPlanName: 'Media Plan P', flag: 'N/A',   severity: 'Normal',   reviewer: null,           status: 'Healthy',     currentImpression: 15600, suggestedImpression: 16200, publishedImpression: null },
-      { id: 'c-9b', campaignName: 'Property Developer', mediaPlanName: 'Media Plan Q', flag: 'Drop',  severity: 'Critical', reviewer: null,           status: 'Need Review', currentImpression: 3600,  suggestedImpression: 5900,  publishedImpression: null  },
-    ],
-  },
-  {
-    id: 'inv-10',
-    inventoryName: 'LED Screen Sudirman Plaza',
-    organization: 'Infini',
-    date: 'Jul 5, 2026',
-    dateObj: new Date('2026-07-05'),
-    type: 'Digital',
-    screenConnection: 'HTML',
-    children: [
-      { id: 'c-10a', campaignName: 'Snack Brand',      mediaPlanName: 'Media Plan R', flag: 'Missing', severity: 'Critical', reviewer: 'Dewi Kusuma', status: 'Investigating', currentImpression: 4800,  suggestedImpression: 8300,  publishedImpression: null },
-      { id: 'c-10b', campaignName: 'Telecom Provider', mediaPlanName: 'Media Plan S', flag: 'Spike',   severity: 'Mild',     reviewer: null,           status: 'Need Review',   currentImpression: 19400, suggestedImpression: 21000, publishedImpression: null },
-    ],
-  },
+  // ── Today ──────────────────────────────────────────────────────────────────
+  buildInventory('inv-11', 0, 'Videotron Ancol Beach', 'Infini', 'Digital', 'ScreenApp', [
+    { id: 'c-11a', campaignName: 'Summer Refresh',   mediaPlanName: 'Media Plan T', flag: 'Spike',   severity: 'Critical', currentImpression: 8500,  suggestedImpression: 12000 },
+    { id: 'c-11b', campaignName: 'Sports Brand Q3',  mediaPlanName: 'Media Plan U', flag: 'Drop',    severity: 'Mild',     currentImpression: 3200,  suggestedImpression: 5800  },
+  ]),
+  buildInventory('inv-12', 0, 'Static Panel Kemayoran', 'Prisma', 'Conventional', 'N/A', [
+    { id: 'c-12a', campaignName: 'Education Campaign', mediaPlanName: 'Media Plan V', flag: 'N/A',   severity: 'Normal', currentImpression: 15400, suggestedImpression: 18000 },
+    { id: 'c-12b', campaignName: 'Lifestyle Brand',    mediaPlanName: 'Media Plan W', flag: 'Spike', severity: 'Mild',   currentImpression: 22000, suggestedImpression: 24500 },
+  ]),
+  buildInventory('inv-13', 0, 'LED Screen Kuningan Tower', 'Infini', 'Digital', 'HTML', [
+    { id: 'c-13a', campaignName: 'Pharma Launch',   mediaPlanName: 'Media Plan X', flag: 'Drop',    severity: 'Critical', currentImpression: 1200, suggestedImpression: 4000 },
+    { id: 'c-13b', campaignName: 'E-Commerce Sale', mediaPlanName: 'Media Plan Y', flag: 'Missing', severity: 'Mild',     currentImpression: 6700, suggestedImpression: 9100 },
+  ]),
+  buildInventory('inv-14', 0, 'Billboard MH Thamrin', 'Prisma', 'Conventional', 'N/A', [
+    { id: 'c-14a', campaignName: 'Bank Promo Aug', mediaPlanName: 'Media Plan Z', flag: 'N/A', severity: 'Normal', currentImpression: 31200, suggestedImpression: 33000 },
+  ]),
+
+  // ── 10 days ago ────────────────────────────────────────────────────────────
+  buildInventory('inv-10', 10, 'LED Screen Sudirman Plaza', 'Infini', 'Digital', 'HTML', [
+    { id: 'c-10a', campaignName: 'Snack Brand',      mediaPlanName: 'Media Plan R', flag: 'Missing', severity: 'Critical', currentImpression: 4800,  suggestedImpression: 8300  },
+    { id: 'c-10b', campaignName: 'Telecom Provider', mediaPlanName: 'Media Plan S', flag: 'Spike',   severity: 'Mild',     currentImpression: 19400, suggestedImpression: 21000 },
+  ]),
+
+  // ── 15 days ago ────────────────────────────────────────────────────────────
+  buildInventory('inv-8', 15, 'Digital Panel Kuningan City', 'Infini', 'Digital', 'ScreenApp', [
+    { id: 'c-8a', campaignName: 'Luxury Auto',     mediaPlanName: 'Media Plan N', flag: 'Drop',    severity: 'Critical', currentImpression: 1900, suggestedImpression: 4200  },
+    { id: 'c-8b', campaignName: 'Cosmetics Brand', mediaPlanName: 'Media Plan O', flag: 'Missing', severity: 'Mild',     currentImpression: 7300, suggestedImpression: 11600 },
+  ]),
+  buildInventory('inv-9', 15, 'Baliho Semanggi', 'Prisma', 'Conventional', 'N/A', [
+    { id: 'c-9a', campaignName: 'National Bank',      mediaPlanName: 'Media Plan P', flag: 'N/A',  severity: 'Normal',   currentImpression: 15600, suggestedImpression: 16200 },
+    { id: 'c-9b', campaignName: 'Property Developer', mediaPlanName: 'Media Plan Q', flag: 'Drop', severity: 'Critical', currentImpression: 3600,  suggestedImpression: 5900  },
+  ]),
+
+  // ── 20 days ago ────────────────────────────────────────────────────────────
+  buildInventory('inv-6', 20, 'Videotron Bundaran HI', 'Infini', 'Digital', 'API INTEGRATION', [
+    { id: 'c-6a', campaignName: 'F&B Launch',   mediaPlanName: 'Media Plan J', flag: 'Spike',   severity: 'Critical', currentImpression: 3400,  suggestedImpression: 6700  },
+    { id: 'c-6b', campaignName: 'Travel Brand', mediaPlanName: 'Media Plan K', flag: 'N/A',     severity: 'Normal',   currentImpression: 17800, suggestedImpression: 18400 },
+    { id: 'c-6c', campaignName: 'Retail Chain', mediaPlanName: 'Media Plan L', flag: 'Missing', severity: 'Mild',     currentImpression: 5200,  suggestedImpression: 8100  },
+  ]),
+  buildInventory('inv-7', 20, 'Static Billboard Sudirman North', 'Prisma', 'Conventional', 'N/A', [
+    { id: 'c-7a', campaignName: 'Banking App', mediaPlanName: 'Media Plan M', flag: 'N/A', severity: 'Normal', currentImpression: 21600, suggestedImpression: 24000 },
+  ]),
+
+  // ── 24 days ago ────────────────────────────────────────────────────────────
+  buildInventory('inv-4', 24, 'LED Billboard Gatot Subroto', 'Prisma', 'Digital', 'HTML', [
+    { id: 'c-4a', campaignName: 'Consumer Goods', mediaPlanName: 'Media Plan G', flag: 'Drop',  severity: 'Critical', currentImpression: 2800,  suggestedImpression: 5400  },
+    { id: 'c-4b', campaignName: 'Finance Brand',  mediaPlanName: 'Media Plan H', flag: 'Spike', severity: 'Mild',     currentImpression: 11200, suggestedImpression: 13500 },
+  ]),
+  buildInventory('inv-5', 24, 'Static Billboard Thamrin', 'Infini', 'Conventional', 'N/A', [
+    { id: 'c-5a', campaignName: 'Insurance Q3', mediaPlanName: 'Media Plan I', flag: 'Missing', severity: 'Mild', currentImpression: 6800, suggestedImpression: 9200 },
+  ]),
+
+  // ── 27 days ago ────────────────────────────────────────────────────────────
+  buildInventory('inv-1', 27, 'LED Videotron Kuningan', 'Infini', 'Digital', 'API INTEGRATION', [
+    { id: 'c-1a', campaignName: 'Q3 Beverage Launch', mediaPlanName: 'Media Plan A', flag: 'Spike', severity: 'Critical', currentImpression: 8200, suggestedImpression: 12400 },
+    { id: 'c-1b', campaignName: 'Retail Promo July',  mediaPlanName: 'Media Plan B', flag: 'Drop',  severity: 'Mild',     currentImpression: 6500, suggestedImpression: 9800  },
+  ]),
+  buildInventory('inv-2', 27, 'Static Billboard Sudirman', 'Prisma', 'Conventional', 'N/A', [
+    { id: 'c-2a', campaignName: 'Brand Awareness Q3', mediaPlanName: 'Media Plan C', flag: 'Missing', severity: 'Critical', currentImpression: 14200, suggestedImpression: 16800 },
+  ]),
+
+  // ── 29 days ago (oldest in the trailing 30-day window) ────────────────────
+  buildInventory('inv-3', 29, 'Digital Signage Senayan', 'Infini', 'Digital', 'ScreenApp', [
+    { id: 'c-3a', campaignName: 'FMCG Summer',       mediaPlanName: 'Media Plan D', flag: 'Spike', severity: 'Mild',   currentImpression: 18500, suggestedImpression: 19200 },
+    { id: 'c-3b', campaignName: 'Auto Lifestyle Q3', mediaPlanName: 'Media Plan E', flag: 'N/A',   severity: 'Normal', currentImpression: 22300, suggestedImpression: 23000 },
+    { id: 'c-3c', campaignName: 'Tech Brand',        mediaPlanName: 'Media Plan F', flag: 'N/A',   severity: 'Normal', currentImpression: 4100,  suggestedImpression: 7600  },
+  ]),
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -523,24 +471,36 @@ function StatusInlineEditor({
 // ─── Detail Drawer ────────────────────────────────────────────────────────────
 
 // ─── Trend Chart — ApexCharts zoomable timeseries ────────────────────────────
-interface TrendPoint { date: string; current_imp: number; suggested_imp: number; published_imp: number | null; }
+interface TrendPoint {
+  date: string;
+  current_imp: number;
+  sugg1: number;
+  sugg2: number;
+  sugg3: number;
+  published_imp: number | null;
+}
 
 function TrendChart({ data }: { data: TrendPoint[] }) {
   const series = [
     {
-      name: 'Current Imp',
+      name: 'Current',
+      type: 'line',
       data: data.map(d => d.current_imp),
-      color: '#6366f1',
     },
     {
-      name: 'Suggested Imp',
-      data: data.map(d => d.suggested_imp),
-      color: '#f97316',
+      name: 'Suggested range',
+      type: 'rangeArea',
+      data: data.map(d => [Math.min(d.sugg1, d.sugg2, d.sugg3), Math.max(d.sugg1, d.sugg2, d.sugg3)]),
     },
     {
-      name: 'Published Imp',
+      name: 'Suggested (1st)',
+      type: 'line',
+      data: data.map(d => d.sugg1),
+    },
+    {
+      name: 'Published',
+      type: 'line',
       data: data.map(d => d.published_imp ?? null),
-      color: '#0ea5e9',
     },
   ];
 
@@ -557,8 +517,9 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
       background: 'transparent',
       animations: { enabled: false },
     },
-    stroke: { curve: 'smooth', width: 2 },
-    colors: ['#6366f1', '#f97316', '#0ea5e9'],
+    stroke: { curve: 'smooth', width: [2, 0, 2, 2], dashArray: [0, 0, 6, 0] },
+    fill: { opacity: [1, 0.16, 1, 1] },
+    colors: ['#6366f1', '#f97316', '#f97316', '#0ea5e9'],
     xaxis: {
       categories: data.map(d => d.date),
       tickAmount: 6,
@@ -580,15 +541,35 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
     tooltip: {
       shared: true,
       intersect: false,
-      style: { fontSize: '12px', fontFamily: 'var(--font-family-geist)' },
-      y: { formatter: (v: number | null) => (v != null ? v.toLocaleString() : '—') },
+      custom: ({ dataPointIndex }: { dataPointIndex: number }) => {
+        const d = data[dataPointIndex];
+        const fmt = (n: number | null) => (n != null ? n.toLocaleString() : '—');
+        const row = (color: string, label: string, value: string) => `
+          <div style="display:flex;justify-content:space-between;gap:14px;padding:2px 0;">
+            <span style="display:flex;align-items:center;gap:6px;color:${color};">
+              <span style="width:7px;height:7px;border-radius:50%;background:${color};display:inline-block;"></span>
+              ${label}
+            </span>
+            <span style="font-weight:600;color:var(--foreground);">${value}</span>
+          </div>`;
+        return `
+          <div style="padding:10px 12px;font-family:var(--font-family-geist);font-size:12px;min-width:190px;background:var(--card);">
+            <div style="font-weight:600;margin-bottom:6px;color:var(--foreground);">${d.date}</div>
+            ${row('#6366f1', 'Current', fmt(d.current_imp))}
+            ${row('#f97316', 'Suggested (1st)', fmt(d.sugg1))}
+            ${row('rgba(249,115,22,0.75)', 'Suggested (2nd)', fmt(d.sugg2))}
+            ${row('rgba(249,115,22,0.55)', 'Suggested (3rd)', fmt(d.sugg3))}
+            ${row('#0ea5e9', 'Published', fmt(d.published_imp))}
+          </div>`;
+      },
     },
     legend: {
       show: true,
       position: 'bottom',
       fontSize: '12px',
       fontFamily: 'var(--font-family-geist)',
-      markers: { size: 6 },
+      markers: { size: 6, fillColors: ['#6366f1', '#f97316', '#0ea5e9'] },
+      customLegendItems: ['Current', 'Suggested range', 'Published'],
     },
     markers: { size: 0 },
     theme: { mode: 'light' },
@@ -620,19 +601,121 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+// ── Shared drawer micro-styles & field components ──────────────────────────
+// Defined at module scope (not inside DetailDrawer's render body) so their
+// component identity stays stable across re-renders — otherwise React would
+// treat each keystroke's re-render as a brand-new component type and
+// force-remount the <input>, dropping focus after every character.
+const DRAWER_SL: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', fontFamily: 'var(--font-family-geist)' };
+const DRAWER_DIV: React.CSSProperties = { borderTop: '1px solid var(--border)', margin: '20px 0' };
+const DRAWER_INP: React.CSSProperties = { width: '100%', height: '36px', padding: '0 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', backgroundColor: 'var(--input-background)', color: 'var(--foreground)', fontFamily: 'var(--font-family-geist)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' };
+const DRAWER_LBL: React.CSSProperties = { fontSize: '12px', fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px', fontFamily: 'var(--font-family-geist)' };
+
+function ROField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span style={DRAWER_LBL}>{label}</span>
+      <div style={{ ...DRAWER_INP, display: 'flex', alignItems: 'center', backgroundColor: 'var(--muted)', color: 'var(--foreground)', borderColor: 'transparent', paddingLeft: '10px', fontSize: '13px', borderRadius: 'var(--radius)', fontFamily: 'var(--font-family-geist)', height: '36px', boxSizing: 'border-box' }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, placeholder }: { label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder?: string }) {
+  return (
+    <div>
+      <span style={DRAWER_LBL}>{label}</span>
+      <div style={{ position: 'relative' }}>
+        <select value={value} onChange={e => onChange(e.target.value)} style={{ ...DRAWER_INP, appearance: 'none', paddingRight: '32px' }}>
+          <option value="">{placeholder ?? 'Select…'}</option>
+          {options.map(o => <option key={o}>{o}</option>)}
+        </select>
+        <ChevronDown size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
+      </div>
+    </div>
+  );
+}
+
+// Suggested Impression (editable) / Suggested Reach (editable) / Suggested Frequency (auto-calculated)
+function SuggestedFieldsGroup({
+  sugImp, setSugImp, sugReachInput, setSugReachInput, sugFreqNum, disabled,
+}: {
+  sugImp: string; setSugImp: (v: string) => void;
+  sugReachInput: string; setSugReachInput: (v: string) => void;
+  sugFreqNum: string; disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+      <div>
+        <span style={DRAWER_LBL}>Suggested Impression</span>
+        <input
+          value={sugImp}
+          onChange={e => setSugImp(e.target.value.replace(/[^\d]/g, ''))}
+          disabled={disabled}
+          inputMode="numeric"
+          style={{ ...DRAWER_INP, opacity: disabled ? 0.6 : 1 }}
+        />
+      </div>
+      <div>
+        <span style={DRAWER_LBL}>Suggested Reach</span>
+        <input
+          value={sugReachInput}
+          onChange={e => setSugReachInput(e.target.value.replace(/[^\d]/g, ''))}
+          disabled={disabled}
+          inputMode="numeric"
+          style={{ ...DRAWER_INP, opacity: disabled ? 0.6 : 1 }}
+        />
+      </div>
+      <ROField label="Suggested Frequency" value={sugFreqNum} />
+    </div>
+  );
+}
+
+function ActionButton({
+  loading, disabled, onClick, icon: Icon, label, bg, color,
+}: {
+  loading: boolean; disabled?: boolean; onClick: () => void;
+  icon: React.ComponentType<{ size?: number }>; label: string; bg: string; color: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        padding: '0 18px', height: '38px', borderRadius: 'var(--radius)', border: 'none',
+        backgroundColor: (disabled && !loading) ? 'var(--muted)' : bg,
+        color: (disabled && !loading) ? 'var(--muted-foreground)' : color,
+        fontFamily: 'var(--font-family-geist)', fontSize: '14px', fontWeight: 600,
+        cursor: (disabled || loading) ? 'not-allowed' : 'pointer',
+      }}
+    >
+      {loading ? <Loader2 size={15} style={{ animation: 'sp-spin 0.8s linear infinite' }} /> : <Icon size={15} />}
+      {loading ? 'Processing…' : label}
+    </button>
+  );
+}
+
 interface DrawerProps {
   child: CampaignRow;
   parent: InventoryRow;
   onClose: () => void;
   onUpdate: (invId: string, childId: string, patch: Partial<CampaignRow>) => void;
+  onToast: (type: ToastType, title: string, message?: string) => void;
 }
 
-function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
+function DetailDrawer({ child, parent, onClose, onUpdate, onToast }: DrawerProps) {
   const [visible, setVisible]         = useState(false);
   const [localStatus, setLocalStatus] = useState<StatusType>(child.status);
 
-  // action-area fields
-  const [pubImp, setPubImp]             = useState(String(child.publishedImpression ?? child.suggestedImpression));
+  // action-area fields — staged "Suggested" values under review
+  const [sugImp, setSugImp]                   = useState(String(child.publishedImpression ?? child.suggestedImpression));
+  const [sugReachInput, setSugReachInput]     = useState(String(
+    child.publishedImpression != null
+      ? Math.round(child.publishedImpression / 2.8)
+      : Math.round(child.suggestedImpression / 2.8)
+  ));
   const [assignee, setAssignee]         = useState('');
   const [reason, setReason]             = useState('');
   const [notes, setNotes]               = useState('');
@@ -643,6 +726,19 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
   const [resolvedBy, setResolvedBy]     = useState(child.status === 'Resolved' ? (child.reviewer ?? 'Ops Team') : '');
   const [publishedAt, setPublishedAt]   = useState<string | null>(child.status === 'Published' ? parent.date : null);
   const [publishedBy, setPublishedBy]   = useState(child.status === 'Published' ? (child.reviewer ?? 'Ops Team') : '');
+
+  // per-action loading state (Confirm & Publish / Escalate / Mark as Resolved)
+  const [loadingAction, setLoadingAction] = useState<null | 'publish' | 'escalate' | 'resolve'>(null);
+  const busy = loadingAction !== null;
+
+  const runAction = (kind: 'publish' | 'escalate' | 'resolve', apply: () => void, toast: () => void) => {
+    setLoadingAction(kind);
+    setTimeout(() => {
+      apply();
+      setLoadingAction(null);
+      toast();
+    }, 900);
+  };
 
   // dataset table skeleton (1.6s simulated load)
   const [tableReady, setTableReady] = useState(false);
@@ -658,18 +754,29 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
   // ── Derived numerics ──────────────────────────────────────────────────────
   const seed       = child.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   const slotCount  = parent.type === 'Conventional' ? 1 : [4, 6, 8][seed % 3];
-  const baseConf: Record<string, number> = { Normal: 93, Mild: 82, Critical: 56 };
-  const confidence = (child.severity ? baseConf[child.severity] : 88) + (seed % 7) - 3;
 
   const fmtN          = (n: number) => n.toLocaleString();
   const currentReach  = Math.round(child.currentImpression   / 2.8);
-  const suggestedReach= Math.round(child.suggestedImpression / 2.8);
-  const pubImpNum     = parseInt(pubImp.replace(/[^\d]/g, '')) || child.suggestedImpression;
-  const publishedReach= Math.round(pubImpNum / 2.8);
-  const publishedFreq = (pubImpNum / Math.max(publishedReach, 1)).toFixed(1);
   const currentFreq   = (child.currentImpression   / Math.max(currentReach, 1)).toFixed(1);
-  const suggestedFreq = (child.suggestedImpression / Math.max(suggestedReach, 1)).toFixed(1);
-  const isPublished   = localStatus === 'Published';
+
+  // Three system-suggested candidates. 1st is the existing suggestedImpression
+  // (the default staged value); 2nd/3rd are deterministic alternates around it.
+  const suggVariancePct    = 0.05 + (seed % 6) / 100;
+  const suggestedImpression1 = child.suggestedImpression;
+  const suggestedImpression2 = Math.max(0, Math.round(suggestedImpression1 * (1 - suggVariancePct)));
+  const suggestedImpression3 = Math.round(suggestedImpression1 * (1 + suggVariancePct * (0.6 + (seed % 3) / 10)));
+  const suggestedReach1 = Math.round(suggestedImpression1 / 2.8);
+  const suggestedReach2 = Math.round(suggestedImpression2 / 2.8);
+  const suggestedReach3 = Math.round(suggestedImpression3 / 2.8);
+  const suggestedFreq1  = (suggestedImpression1 / Math.max(suggestedReach1, 1)).toFixed(1);
+  const suggestedFreq2  = (suggestedImpression2 / Math.max(suggestedReach2, 1)).toFixed(1);
+  const suggestedFreq3  = (suggestedImpression3 / Math.max(suggestedReach3, 1)).toFixed(1);
+
+  // Staged "Suggested" action fields — editable Impression + Reach, auto-calculated Frequency
+  const sugImpNum   = parseInt(sugImp.replace(/[^\d]/g, '')) || suggestedImpression1;
+  const sugReachNum = parseInt(sugReachInput.replace(/[^\d]/g, '')) || suggestedReach1;
+  const sugFreqNum  = (sugImpNum / Math.max(sugReachNum, 1)).toFixed(1);
+  const isPublished = localStatus === 'Published';
 
   // ── 30-day chart data (deterministic) ────────────────────────────────────
   const chartData = useMemo(() => Array.from({ length: 30 }, (_, i) => {
@@ -677,60 +784,45 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
     d.setDate(d.getDate() - (29 - i));
     const s  = (seed * (i + 1)) % 100;
     const curr = Math.round(child.currentImpression   * (0.82 + (s % 30) / 100));
-    const sugg = Math.round(child.suggestedImpression * (0.90 + (s % 20) / 100));
+    const base = Math.round(child.suggestedImpression * (0.90 + (s % 20) / 100));
+    const variance = Math.round(base * (0.05 + ((s + i) % 6) / 100));
+    const sugg1 = base;
+    const sugg2 = Math.max(0, base - variance);
+    const sugg3 = base + Math.round(variance * (0.6 + (s % 3) / 10));
     const pub  = isPublished && i >= 23 && child.publishedImpression != null
       ? Math.round(child.publishedImpression * (0.95 + (s % 8) / 100))
       : null;
-    return { date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), current_imp: curr, suggested_imp: sugg, published_imp: pub };
+    return { date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), current_imp: curr, sugg1, sugg2, sugg3, published_imp: pub };
   }), [child.id, child.currentImpression, child.suggestedImpression, child.publishedImpression, parent.dateObj, isPublished]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  const handleEscalate = () => {
-    if (!assignee) return;
+  const handleEscalateCore = () => {
     const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     setEscalatedTo(assignee); setEscalatedAt(now);
     setLocalStatus('Investigating');
-    onUpdate(parent.id, child.id, { status: 'Investigating' });
+    onUpdate(parent.id, child.id, { status: 'Investigating', reviewer: assignee || child.reviewer || 'Ops Team' });
   };
-  const handleResolve = () => {
+  const handleResolveCore = () => {
     const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const resolver = child.reviewer ?? 'Ops Team';
     setResolvedAt(now);
-    setResolvedBy(child.reviewer ?? 'Ops Team');
+    setResolvedBy(resolver);
     setLocalStatus('Resolved');
-    onUpdate(parent.id, child.id, { status: 'Resolved' });
+    onUpdate(parent.id, child.id, { status: 'Resolved', reviewer: resolver });
   };
-  const handlePublish = () => {
+  const handlePublishCore = () => {
     const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    setPublishedAt(now); setPublishedBy(child.reviewer ?? 'Ops Team');
+    const publisher = assignee || child.reviewer || 'Ops Team';
+    setPublishedAt(now); setPublishedBy(publisher);
     setLocalStatus('Published');
-    onUpdate(parent.id, child.id, { status: 'Published', publishedImpression: pubImpNum });
+    onUpdate(parent.id, child.id, { status: 'Published', publishedImpression: sugImpNum, reviewer: publisher });
   };
 
   // ── Shared micro-styles ───────────────────────────────────────────────────
-  const SL: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', fontFamily: 'var(--font-family-geist)' };
-  const DIV: React.CSSProperties = { borderTop: '1px solid var(--border)', margin: '20px 0' };
-  const INP: React.CSSProperties = { width: '100%', height: '36px', padding: '0 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', backgroundColor: 'var(--input-background)', color: 'var(--foreground)', fontFamily: 'var(--font-family-geist)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' };
-  const LBL: React.CSSProperties = { fontSize: '12px', fontWeight: 500, color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px', fontFamily: 'var(--font-family-geist)' };
-  const ROField = ({ label, value }: { label: string; value: string }) => (
-    <div>
-      <span style={LBL}>{label}</span>
-      <div style={{ ...INP, display: 'flex', alignItems: 'center', backgroundColor: 'var(--muted)', color: 'var(--foreground)', borderColor: 'transparent', paddingLeft: '10px', fontSize: '13px', borderRadius: 'var(--radius)', fontFamily: 'var(--font-family-geist)', height: '36px', boxSizing: 'border-box' }}>
-        {value}
-      </div>
-    </div>
-  );
-  const SelectField = ({ label, value, onChange, options, placeholder }: { label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder?: string }) => (
-    <div>
-      <span style={LBL}>{label}</span>
-      <div style={{ position: 'relative' }}>
-        <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INP, appearance: 'none', paddingRight: '32px' }}>
-          <option value="">{placeholder ?? 'Select…'}</option>
-          {options.map(o => <option key={o}>{o}</option>)}
-        </select>
-        <ChevronDown size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
-      </div>
-    </div>
-  );
+  const SL = DRAWER_SL;
+  const DIV = DRAWER_DIV;
+  const INP = DRAWER_INP;
+  const LBL = DRAWER_LBL;
 
   const tiles = [
     { label: 'Inventory',         value: parent.inventoryName      },
@@ -791,57 +883,63 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
           {/* ── Dataset table ── */}
           <div style={{ marginBottom: '16px' }}>
             <div style={SL}>Dataset</div>
-            <style>{`@keyframes skPulse{0%,100%{opacity:.7}50%{opacity:.3}}`}</style>
+            <style>{`@keyframes skPulse{0%,100%{opacity:.7}50%{opacity:.3}} @keyframes sp-spin{to{transform:rotate(360deg)}}`}</style>
             {!tableReady ? (
               <div>
                 <div style={{ height: '34px', backgroundColor: 'var(--muted)', borderRadius: 'var(--radius-sm)', marginBottom: '6px', animation: 'skPulse 1.4s ease-in-out infinite' }} />
                 {[1, 2, 3].map(i => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
-                    {[0.9, 0.7, 0.7, 0.5].map((op, j) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                    {[0.9, 0.7, 0.85, 0.7, 0.7, 0.5].map((op, j) => (
                       <div key={j} style={{ height: '30px', backgroundColor: 'var(--muted)', borderRadius: 'var(--radius-sm)', opacity: op, animation: 'skPulse 1.4s ease-in-out infinite' }} />
                     ))}
                   </div>
                 ))}
               </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: 'var(--font-family-geist)' }}>
-                <thead>
-                  <tr style={{ backgroundColor: 'var(--muted)' }}>
-                    {['Metric', 'Current Imp', 'Suggested Imp', 'Published Imp'].map(h => (
-                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
-                        {h}
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+                <table style={{ width: '100%', minWidth: '520px', borderCollapse: 'collapse', fontSize: '13px', fontFamily: 'var(--font-family-geist)' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--muted)' }}>
+                      <th rowSpan={2} style={{ position: 'sticky', left: 0, zIndex: 2, padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', backgroundColor: 'var(--muted)' }}>
+                        Metric
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { metric: 'Impression', curr: fmtN(child.currentImpression),  sugg: fmtN(child.suggestedImpression), pub: isPublished ? fmtN(pubImpNum)      : '—' },
-                    { metric: 'Reach',      curr: fmtN(currentReach),             sugg: fmtN(suggestedReach),            pub: isPublished ? fmtN(publishedReach) : '—' },
-                    { metric: 'Frequency',  curr: currentFreq,                    sugg: suggestedFreq,                   pub: isPublished ? publishedFreq         : '—' },
-                  ].map((row, ri) => (
-                    <tr key={row.metric} style={{ backgroundColor: ri % 2 === 1 ? 'var(--muted)' : 'transparent' }}>
-                      <td style={{ padding: '9px 10px', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>{row.metric}</td>
-                      <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }}>{row.curr}</td>
-                      <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: '#b45309', fontWeight: 600 }}>{row.sugg}</td>
-                      <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: isPublished ? '#15803d' : 'var(--muted-foreground)', fontWeight: isPublished ? 600 : 400 }}>{row.pub}</td>
+                      <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                        Current
+                      </th>
+                      <th colSpan={3} style={{ padding: '6px 10px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: '#b45309', borderBottom: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                        Suggested
+                      </th>
+                      <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                        Published
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                    <tr style={{ backgroundColor: 'var(--muted)' }}>
+                      {['1st', '2nd', '3rd'].map((h, i) => (
+                        <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontSize: '11px', fontWeight: i === 0 ? 700 : 600, color: '#b45309', borderBottom: '1px solid var(--border)', backgroundColor: i === 0 ? 'rgba(180,83,9,0.1)' : undefined, whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { metric: 'Impression', curr: fmtN(child.currentImpression), s1: fmtN(suggestedImpression1), s2: fmtN(suggestedImpression2), s3: fmtN(suggestedImpression3), pub: isPublished ? fmtN(sugImpNum)   : '—' },
+                      { metric: 'Reach',      curr: fmtN(currentReach),            s1: fmtN(suggestedReach1),      s2: fmtN(suggestedReach2),      s3: fmtN(suggestedReach3),      pub: isPublished ? fmtN(sugReachNum) : '—' },
+                      { metric: 'Frequency',  curr: currentFreq,                   s1: suggestedFreq1,             s2: suggestedFreq2,             s3: suggestedFreq3,             pub: isPublished ? sugFreqNum         : '—' },
+                    ].map((row, ri) => (
+                      <tr key={row.metric} style={{ backgroundColor: ri % 2 === 1 ? 'var(--muted)' : 'transparent' }}>
+                        <td style={{ position: 'sticky', left: 0, zIndex: 1, padding: '9px 10px', fontWeight: 600, borderBottom: '1px solid var(--border)', borderRight: '1px solid var(--border)', backgroundColor: ri % 2 === 1 ? 'var(--muted)' : 'var(--card)' }}>{row.metric}</td>
+                        <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }}>{row.curr}</td>
+                        <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: '#b45309', fontWeight: 700, backgroundColor: 'rgba(180,83,9,0.06)' }}>{row.s1}</td>
+                        <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: '#b45309' }}>{row.s2}</td>
+                        <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: '#b45309' }}>{row.s3}</td>
+                        <td style={{ padding: '9px 10px', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums', color: isPublished ? '#15803d' : 'var(--muted-foreground)', fontWeight: isPublished ? 600 : 400 }}>{row.pub}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-
-          {/* ── Confidence level ── */}
-          <div style={SL}>Confidence Level</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 14px', backgroundColor: 'var(--muted)', borderRadius: 'var(--radius)' }}>
-            <div style={{ fontFamily: 'var(--font-family-geist)' }}>
-              <span style={{ fontSize: '26px', fontWeight: 700, color: 'var(--foreground)' }}>{confidence}%</span>
-              <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', display: 'block', marginTop: '1px' }}>Baseline: Same weekday last week</span>
-            </div>
-            <div style={{ flex: 1, height: '6px', borderRadius: '999px', backgroundColor: 'var(--border)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${confidence}%`, borderRadius: '999px', backgroundColor: confidence >= 85 ? '#16a34a' : confidence >= 70 ? '#d97706' : '#dc2626' }} />
-            </div>
           </div>
 
           <div style={DIV} />
@@ -858,18 +956,14 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
             </div>
           )}
 
-          {/* ① Need Review — Mild → Confirm & Publish (locked to suggested value) */}
-          {localStatus === 'Need Review' && child.severity === 'Mild' && (
+          {/* ① Need Review — Normal/Mild → Confirm & Publish */}
+          {localStatus === 'Need Review' && (child.severity === 'Mild' || child.severity === 'Normal') && (
             <div>
               <div style={SL}>Confirm & Publish</div>
               <div style={{ padding: '8px 12px', backgroundColor: 'rgba(234,179,8,0.07)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: 'var(--radius)', marginBottom: '14px', fontSize: '12px', color: '#a16207', fontFamily: 'var(--font-family-geist)' }}>
-                Mild anomaly — values are within acceptable range. Confirm to publish with the system-suggested impression.
+                {child.severity} anomaly — values are within acceptable range. Confirm to publish with the system-suggested values, or adjust before publishing.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <ROField label="Published Imp (suggested)"   value={fmtN(child.suggestedImpression)} />
-                <ROField label="Published Reach"             value={fmtN(suggestedReach)}             />
-                <ROField label="Published Freq"              value={suggestedFreq}                    />
-              </div>
+              <SuggestedFieldsGroup sugImp={sugImp} setSugImp={setSugImp} sugReachInput={sugReachInput} setSugReachInput={setSugReachInput} sugFreqNum={sugFreqNum} disabled={busy} />
               <div style={{ marginBottom: '16px' }}>
                 <SelectField
                   label="Assignee"
@@ -879,54 +973,60 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
                   placeholder="Select assignee…"
                 />
               </div>
-              <button
-                onClick={() => {
-                  const now = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                  setPublishedAt(now);
-                  setPublishedBy(assignee || child.reviewer || 'Ops Team');
-                  setLocalStatus('Published');
-                  onUpdate(parent.id, child.id, { status: 'Published', publishedImpression: child.suggestedImpression, reviewer: assignee || child.reviewer });
-                }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 18px', height: '38px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#16a34a', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                <CheckCircle2 size={15} /> Confirm &amp; Publish
-              </button>
+              <ActionButton
+                loading={loadingAction === 'publish'}
+                onClick={() => runAction('publish', handlePublishCore, () => onToast('success', 'Published successfully.'))}
+                icon={CheckCircle2}
+                label="Confirm & Publish"
+                bg="#16a34a"
+                color="white"
+              />
             </div>
           )}
 
-          {/* ② Need Review — Critical → Escalate */}
+          {/* ② Need Review — Critical → Confirm & Publish or Escalate to Data Ops */}
           {localStatus === 'Need Review' && child.severity === 'Critical' && (
             <div>
-              <div style={SL}>Escalate to Data Ops</div>
+              <div style={SL}>Review Required</div>
               <div style={{ padding: '10px 12px', backgroundColor: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 'var(--radius)', marginBottom: '14px', fontSize: '12px', color: '#dc2626', fontFamily: 'var(--font-family-geist)' }}>
                 <ShieldAlert size={13} style={{ display: 'inline', marginRight: '6px' }} />
-                Critical severity — this item must be reviewed by Data Ops before publishing.
+                Critical severity — publish directly if the suggested values look correct, or escalate to Data Ops for investigation.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <ROField label="Current Imp (ref)"   value={fmtN(child.currentImpression)}   />
-                <ROField label="Suggested Imp (ref)"  value={fmtN(child.suggestedImpression)}  />
-                <ROField label="Published Imp (ref)"  value="—" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <div>
-                  <span style={LBL}>Assign to Data Ops <span style={{ color: '#dc2626' }}>*</span></span>
-                  <div style={{ position: 'relative' }}>
-                    <select value={assignee} onChange={e => setAssignee(e.target.value)} style={{ ...INP, appearance: 'none', paddingRight: '32px', borderColor: !assignee ? '#dc2626' : 'var(--border)' }}>
-                      <option value="">Select person…</option>
-                      {DATA_OPS_TEAM.map(p => <option key={p}>{p}</option>)}
-                    </select>
-                    <ChevronDown size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
-                  </div>
+              <SuggestedFieldsGroup sugImp={sugImp} setSugImp={setSugImp} sugReachInput={sugReachInput} setSugReachInput={setSugReachInput} sugFreqNum={sugFreqNum} disabled={busy} />
+              <div style={{ marginBottom: '14px' }}>
+                <span style={LBL}>Assign to Data Ops <span style={{ color: '#dc2626' }}>*</span> <span style={{ fontWeight: 400, color: 'var(--muted-foreground)' }}>(required to escalate)</span></span>
+                <div style={{ position: 'relative' }}>
+                  <select value={assignee} onChange={e => setAssignee(e.target.value)} disabled={busy} style={{ ...INP, appearance: 'none', paddingRight: '32px', opacity: busy ? 0.6 : 1 }}>
+                    <option value="">Select person…</option>
+                    {DATA_OPS_TEAM.map(p => <option key={p}>{p}</option>)}
+                  </select>
+                  <ChevronDown size={13} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
                 </div>
-                <SelectField label="Reason (optional)" value={reason} onChange={setReason} options={REASONS} placeholder="Select reason…" />
               </div>
               <div style={{ marginBottom: '14px' }}>
                 <span style={LBL}>Notes (optional)</span>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...INP, height: '60px', resize: 'vertical', paddingTop: '8px' }} />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={busy} rows={2} style={{ ...INP, height: '60px', resize: 'vertical', paddingTop: '8px', opacity: busy ? 0.6 : 1 }} />
               </div>
-              <button onClick={handleEscalate} disabled={!assignee} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 18px', height: '38px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: !assignee ? 'var(--muted)' : '#d97706', color: !assignee ? 'var(--muted-foreground)' : 'white', fontFamily: 'var(--font-family-geist)', fontSize: '14px', fontWeight: 600, cursor: !assignee ? 'not-allowed' : 'pointer' }}>
-                <Send size={14} /> Escalate to Data Ops
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <ActionButton
+                  loading={loadingAction === 'publish'}
+                  disabled={loadingAction === 'escalate'}
+                  onClick={() => runAction('publish', handlePublishCore, () => onToast('success', 'Published successfully.'))}
+                  icon={CheckCircle2}
+                  label="Confirm & Publish"
+                  bg="#16a34a"
+                  color="white"
+                />
+                <ActionButton
+                  loading={loadingAction === 'escalate'}
+                  disabled={!assignee || loadingAction === 'publish'}
+                  onClick={() => runAction('escalate', handleEscalateCore, () => onToast('success', `Escalated to ${assignee}.`))}
+                  icon={Send}
+                  label="Escalate to Data Ops"
+                  bg="#d97706"
+                  color="white"
+                />
+              </div>
             </div>
           )}
 
@@ -945,11 +1045,16 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
               </div>
               <div style={{ marginBottom: '14px' }}>
                 <span style={LBL}>Resolution notes (optional)</span>
-                <textarea value={resolveNotes} onChange={e => setResolveNotes(e.target.value)} rows={2} placeholder="Describe what Data Ops fixed…" style={{ ...INP, height: '60px', resize: 'vertical', paddingTop: '8px' }} />
+                <textarea value={resolveNotes} onChange={e => setResolveNotes(e.target.value)} disabled={busy} rows={2} placeholder="Describe what Data Ops fixed…" style={{ ...INP, height: '60px', resize: 'vertical', paddingTop: '8px', opacity: busy ? 0.6 : 1 }} />
               </div>
-              <button onClick={handleResolve} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 18px', height: '38px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#7C3AED', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-                <Check size={15} /> Mark as Resolved
-              </button>
+              <ActionButton
+                loading={loadingAction === 'resolve'}
+                onClick={() => runAction('resolve', handleResolveCore, () => onToast('success', 'Marked as resolved.'))}
+                icon={Check}
+                label="Mark as Resolved"
+                bg="#7C3AED"
+                color="white"
+              />
             </div>
           )}
 
@@ -1035,9 +1140,9 @@ function DetailDrawer({ child, parent, onClose, onUpdate }: DrawerProps) {
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <ROField label="Published Imp"   value={fmtN(pubImpNum)}       />
-                <ROField label="Published Reach"  value={fmtN(publishedReach)}  />
-                <ROField label="Published Freq"   value={publishedFreq}         />
+                <ROField label="Published Imp"   value={fmtN(sugImpNum)}     />
+                <ROField label="Published Reach"  value={fmtN(sugReachNum)}  />
+                <ROField label="Published Freq"   value={sugFreqNum}         />
               </div>
               {reason && <ROField label="Reason" value={reason} />}
               {notes  && <div style={{ marginTop: '10px' }}><ROField label="Notes" value={notes} /></div>}
@@ -1350,9 +1455,13 @@ export function CampaignReport() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [drawerItem, setDrawerItem] = useState<{ child: CampaignRow; parent: InventoryRow } | null>(null);
+  const { toasts, showToast, dismiss } = useToast();
 
-  // Filters — default date to today so the page opens showing only today's data
-  const todayISO = new Date().toISOString().slice(0, 10);
+  // Filters — default date to today so the page opens showing only today's data.
+  // Built from local date parts (not toISOString, which is UTC) so it matches
+  // the local-midnight dates the seed data and date comparisons use.
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const [filterDate, setFilterDate] = useState(todayISO);
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
   const [filterOrg, setFilterOrg] = useState<string[]>([]);
@@ -1376,7 +1485,9 @@ export function CampaignReport() {
       let children = inv.children;
 
       // Status tab filter
-      if (activeTab !== 'all') {
+      if (activeTab === 'Resolved_Published') {
+        children = children.filter(c => c.status === 'Resolved' || c.status === 'Published');
+      } else if (activeTab !== 'all') {
         const tabStatus = activeTab as StatusType;
         children = children.filter(c => c.status === tabStatus);
       }
@@ -1469,12 +1580,11 @@ export function CampaignReport() {
   const orgs = useMemo(() => [...new Set(data.map(r => r.organization))], [data]);
 
   const tabs = [
-    { label: 'All',          value: 'all',           count: tabCounts['all']           },
-    { label: 'Healthy',      value: 'Healthy',        count: tabCounts['Healthy']       },
-    { label: 'Need Review',  value: 'Need Review',    count: tabCounts['Need Review']   },
-    { label: 'Investigating',value: 'Investigating',  count: tabCounts['Investigating'] },
-    { label: 'Resolved',     value: 'Resolved',       count: tabCounts['Resolved']      },
-    { label: 'Published',    value: 'Published',      count: tabCounts['Published']     },
+    { label: 'All',                 value: 'all',                count: tabCounts['all']           },
+    { label: 'Healthy',             value: 'Healthy',             count: tabCounts['Healthy']       },
+    { label: 'Need Review',         value: 'Need Review',         count: tabCounts['Need Review']   },
+    { label: 'Investigating',       value: 'Investigating',       count: tabCounts['Investigating'] },
+    { label: 'Resolved & Published',value: 'Resolved_Published',  count: (tabCounts['Resolved'] ?? 0) + (tabCounts['Published'] ?? 0) },
   ];
 
   // Shared input style
@@ -1492,6 +1602,15 @@ export function CampaignReport() {
     boxSizing: 'border-box',
   };
 
+  // Each row type gets its own explicit CSS Grid column template instead of
+  // sharing an HTML <table>'s column model — parent and child rows have
+  // different column counts/meanings, so a shared table column grid leaves
+  // dead space once either row's column count changes. The one unconstrained
+  // column (1fr) absorbs all remaining width, so every row fills edge-to-edge
+  // regardless of column count.
+  const PARENT_GRID_COLS = '36px minmax(200px, 1fr) 120px 100px 130px 150px 210px';
+  const CHILD_GRID_COLS  = '3px minmax(220px, 1fr) 90px 100px 150px 110px 110px 110px 160px 56px';
+
   const thStyle: React.CSSProperties = {
     padding: '10px 12px',
     fontFamily: 'var(--font-family-geist)',
@@ -1500,10 +1619,12 @@ export function CampaignReport() {
     color: 'var(--muted-foreground)',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.04em',
-    textAlign: 'left',
+    display: 'flex',
+    alignItems: 'center',
     borderBottom: '1px solid var(--border)',
     whiteSpace: 'nowrap',
     backgroundColor: 'var(--muted)',
+    overflow: 'hidden',
   };
 
   const tdStyle: React.CSSProperties = {
@@ -1512,7 +1633,9 @@ export function CampaignReport() {
     fontFamily: 'var(--font-family-geist)',
     color: 'var(--foreground)',
     borderBottom: '1px solid var(--border)',
-    verticalAlign: 'middle',
+    display: 'flex',
+    alignItems: 'center',
+    minWidth: 0,
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -1759,192 +1882,183 @@ export function CampaignReport() {
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...thStyle, width: '36px' }} />
-                  <th style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('inventoryName')}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      Inventory Name <SortIcon field="inventoryName" sortField={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-                  <th style={thStyle}>Organization</th>
-                  <th style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('date')}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      Date <SortIcon field="date" sortField={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Screen Connection</th>
-                  <th style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('publishedCount')}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      Total Campaign <SortIcon field="publishedCount" sortField={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-                  <th style={{ ...thStyle, width: '120px' }} />
-                  <th style={{ ...thStyle, width: '120px' }} />
-                  <th style={{ ...thStyle, width: '120px' }} />
-                  <th style={{ ...thStyle, width: '60px' }} />
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map(inv => {
-                  const isExpanded = expandedRows.has(inv.id);
-                  return (
-                    <React.Fragment key={inv.id}>
-                      {/* Parent row */}
-                      <tr
-                        key={inv.id}
-                        onClick={() => toggleRow(inv.id)}
-                        style={{
-                          cursor: 'pointer',
-                          backgroundColor: isExpanded ? '#efefef' : 'transparent',
-                          transition: 'background-color 0.15s',
-                        }}
-                        onMouseEnter={e => { if (!isExpanded) (e.currentTarget as HTMLElement).style.backgroundColor = '#f3f3f3'; }}
-                        onMouseLeave={e => { if (!isExpanded) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
-                      >
-                        <td style={{ ...tdStyle, width: '36px', textAlign: 'center' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: '20px', height: '20px', borderRadius: 'var(--radius-sm)',
-                            color: 'var(--muted-foreground)',
-                            transition: 'transform 0.2s',
-                            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                          }}>
-                            <ChevronRight size={14} />
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{inv.inventoryName}</span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>{inv.organization}</span>
-                        </td>
-                        <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                          {String(inv.dateObj.getDate()).padStart(2,'0')}-{String(inv.dateObj.getMonth()+1).padStart(2,'0')}-{inv.dateObj.getFullYear()}
-                        </td>
-                        <td style={tdStyle}><TypeTag type={inv.type} /></td>
-                        <td style={tdStyle}>
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: inv.screenConnection === 'N/A' ? 'var(--muted-foreground)' : 'var(--foreground)',
-                            fontFamily: 'var(--font-family-geist)',
-                          }}>
-                            {inv.screenConnection}
-                          </span>
-                        </td>
-                        <td style={tdStyle}><PublishedCountBadge children={inv.children} /></td>
-                        <td style={{ ...tdStyle, width: '120px' }} />
-                        <td style={{ ...tdStyle, width: '120px' }} />
-                        <td style={{ ...tdStyle, width: '120px' }} />
-                        <td style={{ ...tdStyle, width: '60px' }} />
-                      </tr>
+            <div role="table" style={{ minWidth: '1120px' }}>
+              <div role="row" style={{ display: 'grid', gridTemplateColumns: PARENT_GRID_COLS }}>
+                <div role="columnheader" style={{ ...thStyle }} />
+                <div role="columnheader" style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('inventoryName')}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Inventory Name <SortIcon field="inventoryName" sortField={sortField} sortDir={sortDir} />
+                  </span>
+                </div>
+                <div role="columnheader" style={thStyle}>Organization</div>
+                <div role="columnheader" style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('date')}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Date <SortIcon field="date" sortField={sortField} sortDir={sortDir} />
+                  </span>
+                </div>
+                <div role="columnheader" style={thStyle}>Type</div>
+                <div role="columnheader" style={thStyle}>Screen Connection</div>
+                <div role="columnheader" style={{ ...thStyle, cursor: 'pointer' }} onClick={() => handleSort('publishedCount')}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    Total Campaign <SortIcon field="publishedCount" sortField={sortField} sortDir={sortDir} />
+                  </span>
+                </div>
+              </div>
 
-                      {/* Children rows */}
-                      {isExpanded && (
-                        <>
-                          {/* Child header */}
-                          <tr>
-                            <td style={{ backgroundColor: '#e2e2e2', borderBottom: '1px solid var(--border)', borderLeft: '3px solid #7C3AED' }} />
-                            <th style={{ ...thStyle, paddingLeft: '40px', backgroundColor: '#e2e2e2', fontSize: '11px' }}>Campaign / Media Plan</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Flag</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Severity</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Status</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }} />
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', width: '120px', color: 'var(--muted-foreground)' }}>Current Imp.</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', width: '120px', color: '#b45309' }}>Suggested Imp.</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', width: '120px', color: '#15803d' }}>Published Imp.</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Reviewer</th>
-                            <th style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', width: '60px' }}>Action</th>
-                          </tr>
-                          {inv.children.map(child => {
-                            const isPublished = child.status === 'Published';
-                            const fmtN = (n: number) => n.toLocaleString();
-                            return (
-                            <tr
-                              key={child.id}
-                              style={{ backgroundColor: '#f9f9f9' }}
-                            >
-                              <td style={{ ...tdStyle, borderLeft: '3px solid #7C3AED' }} />
-                              <td style={{ ...tdStyle, paddingLeft: '40px' }}>
-                                <div style={{ fontWeight: 500 }}>{child.campaignName}</div>
-                                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px' }}>{child.mediaPlanName}</div>
-                              </td>
-                              <td style={tdStyle}><FlagChip flag={child.flag} /></td>
-                              <td style={tdStyle}><SeverityBadge severity={child.severity} /></td>
-                              <td style={{ ...tdStyle, minWidth: '140px' }}>
-                                {child.status === 'Healthy' ? (
-                                  <StatusBadge status={child.status} />
-                                ) : (
-                                  <StatusInlineEditor
-                                    status={child.status}
-                                    onChange={s => updateChild(inv.id, child.id, { status: s })}
-                                  />
-                                )}
-                              </td>
-                              <td style={tdStyle} />
-                              {/* Current Impression */}
-                              <td style={{ ...tdStyle, width: '120px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
-                                  {fmtN(child.currentImpression)}
-                                </span>
-                              </td>
-                              {/* Suggested Impression */}
-                              <td style={{ ...tdStyle, width: '120px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
-                                  {fmtN(child.suggestedImpression)}
-                                </span>
-                              </td>
-                              {/* Published Impression — only for Published rows */}
-                              <td style={{ ...tdStyle, width: '120px' }}>
-                                {isPublished && child.publishedImpression != null ? (
-                                  <span style={{
-                                    fontSize: '13px', fontWeight: 700, color: '#15803d',
-                                    fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
-                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                                  }}>
-                                    <Check size={12} strokeWidth={3} />
-                                    {fmtN(child.publishedImpression)}
-                                  </span>
-                                ) : (
-                                  <span style={{ color: 'var(--muted-foreground)', fontSize: '13px' }}>—</span>
-                                )}
-                              </td>
-                              <td style={{ ...tdStyle, minWidth: '150px' }}>
-                                <ReviewerPill
-                                  reviewer={child.reviewer}
-                                  onAssign={r => updateChild(inv.id, child.id, { reviewer: r })}
+              {paginated.map(inv => {
+                const isExpanded = expandedRows.has(inv.id);
+                return (
+                  <React.Fragment key={inv.id}>
+                    {/* Parent row */}
+                    <div
+                      role="row"
+                      onClick={() => toggleRow(inv.id)}
+                      style={{
+                        display: 'grid', gridTemplateColumns: PARENT_GRID_COLS,
+                        cursor: 'pointer',
+                        backgroundColor: isExpanded ? '#efefef' : 'transparent',
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={e => { if (!isExpanded) (e.currentTarget as HTMLElement).style.backgroundColor = '#f3f3f3'; }}
+                      onMouseLeave={e => { if (!isExpanded) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
+                    >
+                      <div role="cell" style={{ ...tdStyle, justifyContent: 'center' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          width: '20px', height: '20px', borderRadius: 'var(--radius-sm)',
+                          color: 'var(--muted-foreground)',
+                          transition: 'transform 0.2s',
+                          transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                        }}>
+                          <ChevronRight size={14} />
+                        </span>
+                      </div>
+                      <div role="cell" style={tdStyle}>
+                        <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{inv.inventoryName}</span>
+                      </div>
+                      <div role="cell" style={tdStyle}>
+                        <span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>{inv.organization}</span>
+                      </div>
+                      <div role="cell" style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
+                        {String(inv.dateObj.getDate()).padStart(2,'0')}-{String(inv.dateObj.getMonth()+1).padStart(2,'0')}-{inv.dateObj.getFullYear()}
+                      </div>
+                      <div role="cell" style={tdStyle}><TypeTag type={inv.type} /></div>
+                      <div role="cell" style={tdStyle}>
+                        <span style={{
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          color: inv.screenConnection === 'N/A' ? 'var(--muted-foreground)' : 'var(--foreground)',
+                          fontFamily: 'var(--font-family-geist)',
+                        }}>
+                          {inv.screenConnection}
+                        </span>
+                      </div>
+                      <div role="cell" style={tdStyle}><PublishedCountBadge children={inv.children} /></div>
+                    </div>
+
+                    {/* Children rows */}
+                    {isExpanded && (
+                      <>
+                        {/* Child header */}
+                        <div role="row" style={{ display: 'grid', gridTemplateColumns: CHILD_GRID_COLS }}>
+                          <div role="columnheader" style={{ backgroundColor: '#7C3AED', borderBottom: '1px solid var(--border)' }} />
+                          <div role="columnheader" style={{ ...thStyle, paddingLeft: '40px', backgroundColor: '#e2e2e2', fontSize: '11px' }}>Campaign / Media Plan</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Flag</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Severity</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Status</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', color: 'var(--muted-foreground)', justifyContent: 'flex-end', textAlign: 'right' }}>Current Imp.</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', color: '#b45309', justifyContent: 'flex-end', textAlign: 'right' }}>Suggested Imp.</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', color: '#15803d', justifyContent: 'flex-end', textAlign: 'right' }}>Published Imp.</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px' }}>Reviewer</div>
+                          <div role="columnheader" style={{ ...thStyle, backgroundColor: '#e2e2e2', fontSize: '11px', justifyContent: 'center' }}>Action</div>
+                        </div>
+                        {inv.children.map(child => {
+                          const isPublished = child.status === 'Published';
+                          const fmtN = (n: number) => n.toLocaleString();
+                          return (
+                          <div
+                            role="row"
+                            key={child.id}
+                            style={{ display: 'grid', gridTemplateColumns: CHILD_GRID_COLS, backgroundColor: '#f9f9f9' }}
+                          >
+                            <div role="cell" style={{ backgroundColor: '#7C3AED', borderBottom: '1px solid var(--border)' }} />
+                            <div role="cell" style={{ ...tdStyle, paddingLeft: '40px' }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.campaignName}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{child.mediaPlanName}</div>
+                              </div>
+                            </div>
+                            <div role="cell" style={tdStyle}><FlagChip flag={child.flag} /></div>
+                            <div role="cell" style={tdStyle}><SeverityBadge severity={child.severity} /></div>
+                            <div role="cell" style={tdStyle}>
+                              {child.status === 'Healthy' ? (
+                                <StatusBadge status={child.status} />
+                              ) : (
+                                <StatusInlineEditor
+                                  status={child.status}
+                                  onChange={s => updateChild(inv.id, child.id, { status: s })}
                                 />
-                              </td>
-                              <td style={tdStyle}>
-                                <button
-                                  onClick={e => { e.stopPropagation(); startTransition(() => setDrawerItem({ child, parent: inv })); }}
-                                  style={{
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                    width: '30px', height: '30px', borderRadius: 'var(--radius-sm)',
-                                    border: '1px solid var(--border)', backgroundColor: 'transparent',
-                                    color: 'var(--muted-foreground)', cursor: 'pointer',
-                                    transition: 'all 0.15s',
-                                  }}
-                                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--muted)'; e.currentTarget.style.color = 'var(--foreground)'; }}
-                                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--muted-foreground)'; }}
-                                  title="View detail"
-                                >
-                                  <Eye size={13} />
-                                </button>
-                              </td>
-                            </tr>
-                            );
-                          })}
-                        </>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                              )}
+                            </div>
+                            {/* Current Impression */}
+                            <div role="cell" style={{ ...tdStyle, justifyContent: 'flex-end' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                                {fmtN(child.currentImpression)}
+                              </span>
+                            </div>
+                            {/* Suggested Impression */}
+                            <div role="cell" style={{ ...tdStyle, justifyContent: 'flex-end' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: '#b45309', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                                {fmtN(child.suggestedImpression)}
+                              </span>
+                            </div>
+                            {/* Published Impression — only for Published rows */}
+                            <div role="cell" style={{ ...tdStyle, justifyContent: 'flex-end' }}>
+                              {isPublished && child.publishedImpression != null ? (
+                                <span style={{
+                                  fontSize: '13px', fontWeight: 700, color: '#15803d',
+                                  fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
+                                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                }}>
+                                  <Check size={12} strokeWidth={3} />
+                                  {fmtN(child.publishedImpression)}
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--muted-foreground)', fontSize: '13px' }}>—</span>
+                              )}
+                            </div>
+                            <div role="cell" style={tdStyle}>
+                              <ReviewerPill
+                                reviewer={child.reviewer}
+                                onAssign={r => updateChild(inv.id, child.id, { reviewer: r })}
+                              />
+                            </div>
+                            <div role="cell" style={{ ...tdStyle, justifyContent: 'center' }}>
+                              <button
+                                onClick={e => { e.stopPropagation(); startTransition(() => setDrawerItem({ child, parent: inv })); }}
+                                style={{
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  width: '30px', height: '30px', borderRadius: 'var(--radius-sm)',
+                                  border: '1px solid var(--border)', backgroundColor: 'transparent',
+                                  color: 'var(--muted-foreground)', cursor: 'pointer',
+                                  transition: 'all 0.15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--muted)'; e.currentTarget.style.color = 'var(--foreground)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--muted-foreground)'; }}
+                                title="View detail"
+                              >
+                                <Eye size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -2000,8 +2114,11 @@ export function CampaignReport() {
           parent={drawerItem.parent}
           onClose={() => setDrawerItem(null)}
           onUpdate={updateChild}
+          onToast={showToast}
         />
       )}
+
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
