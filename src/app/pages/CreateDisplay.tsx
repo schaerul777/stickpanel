@@ -694,11 +694,11 @@ export function CreateDisplay() {
     setSaving(true);
     setTimeout(() => {
       showToast('success', 'Display saved', `"${form.name}" has been added to inventory.`);
-      navigate('/inventory/display');
+      navigate('/core-3/inventory/display');
     }, 500);
   };
 
-  const handleCancel = () => navigate('/inventory/display');
+  const handleCancel = () => navigate('/core-3/inventory/display');
 
   return (
     <div style={{ fontFamily: 'var(--font-family-geist)', maxWidth: '100%' }}>

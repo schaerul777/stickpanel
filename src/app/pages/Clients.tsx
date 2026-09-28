@@ -8,6 +8,8 @@ import { ManageContactsModal } from '../components/ManageContactsModal';
 import { UploadDocumentsModal } from '../components/UploadDocumentsModal';
 import { BulkChangeSalesPersonModal } from '../components/BulkChangeSalesPersonModal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { CORE_META } from '../core/coreConfig';
+import { useCore } from '../core/CoreContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -285,6 +287,7 @@ const mockClients: Client[] = [
 // ── Page Component ────────────────────────────────────────────────────────────
 
 export function Clients() {
+  const { activeCore } = useCore();
   const [clients, setClients] = useState<Client[]>(mockClients);
   const { toasts, showToast, dismiss } = useToast();
 
@@ -404,6 +407,8 @@ export function Clients() {
 
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+          <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', cursor: 'default' }}>{CORE_META[activeCore].label}</span>
+          <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)' }}>/</span>
           <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', cursor: 'default' }}>Sales</span>
           <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)' }}>/</span>
           <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-foreground)', fontWeight: 500 }}>Clients</span>

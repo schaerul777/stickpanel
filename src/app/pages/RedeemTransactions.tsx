@@ -4,6 +4,8 @@ import { DataTable } from '../components/DataTable';
 import { ApproveModal } from '../components/ApproveModal';
 import { UploadResultsModal } from '../components/UploadResultsModal';
 import { DetailDrawer } from '../components/DetailDrawer';
+import { CORE_META } from '../core/coreConfig';
+import { useCore } from '../core/CoreContext';
 
 interface Transaction {
   id: string;
@@ -133,6 +135,7 @@ const initialTransactions: Transaction[] = [
 ];
 
 export function RedeemTransactions() {
+  const { activeCore } = useCore();
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -252,6 +255,11 @@ export function RedeemTransactions() {
 
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+          <span style={{
+            fontFamily: 'var(--font-family-geist)', fontSize: '12px',
+            color: 'var(--color-muted-foreground)', cursor: 'default',
+          }}>{CORE_META[activeCore].label}</span>
+          <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)' }}>/</span>
           <span style={{
             fontFamily: 'var(--font-family-geist)', fontSize: '12px',
             color: 'var(--color-muted-foreground)', cursor: 'default',

@@ -6,6 +6,8 @@ import { BulkActionsModal } from '../components/BulkActionsModal';
 import { AddEditDriverModal } from '../components/AddEditDriverModal';
 import { DocumentVerificationModal } from '../components/DocumentVerificationModal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { CORE_META } from '../core/coreConfig';
+import { useCore } from '../core/CoreContext';
 
 // ── Mock Data ────────────────────────────────────────────────────────────────
 
@@ -510,6 +512,7 @@ const mockDrivers: Driver[] = [
 // ── Page Component ────────────────────────────────────────────────────────────
 
 export function Drivers() {
+  const { activeCore } = useCore();
   const [drivers, setDrivers] = useState<Driver[]>(mockDrivers);
   const { toasts, showToast, dismiss } = useToast();
 
@@ -712,6 +715,11 @@ export function Drivers() {
 
         {/* Breadcrumb */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+          <span style={{
+            fontFamily: 'var(--font-family-geist)', fontSize: '12px',
+            color: 'var(--color-muted-foreground)', cursor: 'default',
+          }}>{CORE_META[activeCore].label}</span>
+          <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)' }}>/</span>
           <span style={{
             fontFamily: 'var(--font-family-geist)', fontSize: '12px',
             color: 'var(--color-muted-foreground)', cursor: 'default',

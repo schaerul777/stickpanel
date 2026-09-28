@@ -398,7 +398,7 @@ export function InventoryDisplay() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/inventory/display/new')}
+            onClick={() => navigate('/core-3/inventory/display/new')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#7C3AED', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
           >
             <Plus size={14} /> Add Display
