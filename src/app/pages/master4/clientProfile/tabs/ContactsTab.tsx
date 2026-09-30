@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Star, ShieldCheck, ShieldOff, UserX, Pencil, X as XIcon } from 'lucide-react';
+import { Plus, Star, UserX, Pencil, X as XIcon } from 'lucide-react';
 import { MasterTable, type MasterColumn } from '../../../../components/master/MasterTable';
 import { FormDrawer } from '../../../../components/master/FormDrawer';
 import { StatusPill } from '../../../../components/master/StatusPill';
@@ -9,7 +9,7 @@ import { Switch } from '../../../../components/master/Switch';
 import { useClientProfileUI, hasPermission } from '../../../../core/clientProfileUI';
 import {
   useClientProfileData, getContactsForClientCompany, isContactEmailTaken, upsertContact,
-  deactivateContact, setContactVerified, adminUsers,
+  deactivateContact,
   type ClientRecord, type ClientContact, type ContactPhone,
 } from '../../../../core/clientProfileStore';
 import { UserSquare2 } from 'lucide-react';
@@ -19,8 +19,6 @@ interface TabProps {
   client: ClientRecord;
   showToast: (type: ToastType, title: string, message?: string) => void;
 }
-
-const CURRENT_ADMIN_NAME = adminUsers[0]?.name ?? 'Admin';
 
 export function ContactsTab({ client, showToast }: TabProps) {
   useClientProfileData();
@@ -43,7 +41,6 @@ export function ContactsTab({ client, showToast }: TabProps) {
       <span>{r.phones[0]?.number ?? '—'}{r.phones.length > 1 && <span style={{ color: 'var(--color-muted-foreground)' }}> +{r.phones.length - 1} more</span>}</span>
     ) },
     { key: 'active', label: 'Active', render: r => r.active ? <StatusPill label="Active" tone="success" /> : <StatusPill label="Inactive" tone="neutral" /> },
-    { key: 'verified', label: 'Verified', render: r => r.verified ? <StatusPill label="Verified" tone="success" /> : <StatusPill label="Not verified" tone="neutral" /> },
     { key: 'actions', label: 'Actions', render: r => (
       <div style={{ display: 'flex', gap: 6 }}>
         {hasPermission('client-contact:write') && (
@@ -51,15 +48,6 @@ export function ContactsTab({ client, showToast }: TabProps) {
         )}
         {hasPermission('client-contact:write') && r.active && (
           <button onClick={() => { deactivateContact(r.id); showToast('success', 'Contact deactivated'); }} style={{ ...iconBtn, color: '#EF4444' }} aria-label="Deactivate" title="Deactivate"><UserX size={14} /></button>
-        )}
-        {hasPermission('client-contact:verify') && (
-          <button
-            onClick={() => { setContactVerified(r.id, !r.verified, r.verified ? null : CURRENT_ADMIN_NAME); showToast('success', r.verified ? 'Verification removed' : 'Contact verified'); }}
-            style={{ ...iconBtn, color: r.verified ? 'var(--color-muted-foreground)' : '#10B981' }}
-            aria-label={r.verified ? 'Unverify' : 'Verify'} title={r.verified ? 'Unverify' : 'Verify'}
-          >
-            {r.verified ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
-          </button>
         )}
       </div>
     ) },

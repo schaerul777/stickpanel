@@ -98,9 +98,6 @@ export interface ClientContact {
   phones: ContactPhone[];
   active: boolean;
   isPrimaryForCompany: boolean;
-  verified: boolean;
-  verifiedBy: string | null;
-  verifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -250,15 +247,15 @@ function buildSeed() {
         salutation: 'Mr', name: nameA, position: 'Marketing Manager',
         email: `${nameA.toLowerCase().replace(/\s+/g, '.')}.${i}${li}@${seed.name.split(' ')[0].toLowerCase()}.co.id`,
         officeEmail: '', phones: [{ number: `08${1100000000 + i * 1000 + li}`, type: 'Mobile' }],
-        active: true, isPrimaryForCompany: true, verified: l.verified, verifiedBy: l.verified ? adminUsers[l.salesIdx].name : null,
-        verifiedAt, createdAt, updatedAt: createdAt,
+        active: true, isPrimaryForCompany: true,
+        createdAt, updatedAt: createdAt,
       });
       contacts.push({
         id: nextId('contact'), clientId, companyId: companyId(l.companyIdx),
         salutation: 'Ms', name: nameB, position: 'Finance Staff',
         email: `${nameB.toLowerCase().replace(/\s+/g, '.')}.${i}${li}@${seed.name.split(' ')[0].toLowerCase()}.co.id`,
         officeEmail: '', phones: [{ number: `08${1200000000 + i * 1000 + li}`, type: 'Mobile' }, { number: `021${5000000 + i}`, type: 'Office' }],
-        active: true, isPrimaryForCompany: false, verified: false, verifiedBy: null, verifiedAt: null,
+        active: true, isPrimaryForCompany: false,
         createdAt, updatedAt: createdAt,
       });
     });
@@ -439,7 +436,7 @@ export function upsertContact(clientId: string, companyId: string, data: Contact
     } else {
       const rec: ClientContact = {
         ...data, id: nextId('contact'), clientId, companyId,
-        verified: false, verifiedBy: null, verifiedAt: null, createdAt: touch(), updatedAt: touch(),
+        createdAt: touch(), updatedAt: touch(),
       };
       contacts = [rec, ...contacts];
     }
@@ -449,15 +446,6 @@ export function upsertContact(clientId: string, companyId: string, data: Contact
 
 export function deactivateContact(id: string) {
   store.setState(s => ({ ...s, contacts: s.contacts.map(c => c.id === id ? { ...c, active: false, updatedAt: touch() } : c) }));
-}
-
-export function setContactVerified(id: string, verified: boolean, adminUserName: string | null) {
-  store.setState(s => ({
-    ...s,
-    contacts: s.contacts.map(c => c.id === id ? {
-      ...c, verified, verifiedBy: verified ? adminUserName : null, verifiedAt: verified ? touch() : null, updatedAt: touch(),
-    } : c),
-  }));
 }
 
 // ─── Billings ───────────────────────────────────────────────────────────────
