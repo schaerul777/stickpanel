@@ -3,6 +3,7 @@ import {
   Boxes, ClipboardCheck, FlaskConical, Handshake, Server,
   MapPin, Building2, MonitorPlay, BarChart2, Image as ImageIcon,
   Package, Tag, Grid3x3, Award, Clock, CalendarClock,
+  Factory, Landmark, Contact,
 } from 'lucide-react';
 
 export type CoreId = 'core-2' | 'core-3' | 'core-4';
@@ -149,6 +150,9 @@ export const coreMenus: Record<CoreId, MenuItem[]> = {
         { name: 'Company',                 path: '/core-4/master/company',                 icon: Building2     },
         { name: 'Product Category',        path: '/core-4/master/product-category',        icon: Boxes         },
         { name: 'Product',                 path: '/core-4/master/product',                 icon: Package       },
+        { name: 'Industry',                path: '/core-4/master/industry',                icon: Factory       },
+        { name: 'Bank',                    path: '/core-4/master/bank',                    icon: Landmark      },
+        { name: 'Client Profile',          path: '/core-4/master/client-profile',          icon: Contact       },
         { name: 'Price',                   path: '/core-4/master/price',                   icon: Tag           },
         { name: 'Price Matrix',            path: '/core-4/master/price-matrix',            icon: Grid3x3       },
         { name: 'Brand',                   path: '/core-4/master/brand',                   icon: Award         },

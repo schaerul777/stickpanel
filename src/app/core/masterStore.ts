@@ -79,6 +79,8 @@ export interface MasterState {
   termMoments: SimpleTextRecord[];
   termDues: SimpleTextRecord[];
   priceTiers: SimpleTextRecord[];
+  industries: SimpleTextRecord[];
+  banks: SimpleTextRecord[];
   productCategories: ProductCategoryRecord[];
   companies: CompanyRecord[];
   products: ProductRecord[];
@@ -139,6 +141,14 @@ const priceTiers = simpleRecords('price-tier', [
   'Standard', 'Agency', 'Corporate', 'Government', 'Promo',
 ]);
 
+const industries = simpleRecords('industry', [
+  'F&B', 'Retail', 'Automotive', 'FMCG', 'Property', 'Technology', 'Finance', 'Education',
+]);
+
+const banks = simpleRecords('bank', [
+  'BCA', 'Mandiri', 'BNI', 'BRI', 'CIMB Niaga', 'Permata',
+]);
+
 const productCategories: ProductCategoryRecord[] = [
   { id: nextId('cat'), name: 'Digital Screen',   image: null, quantityUnit: 'Screen', durationUnit: 'Day',   campaignable: true,  createdAt: daysAgoISO(28), updatedAt: daysAgoISO(28), deletedAt: null },
   { id: nextId('cat'), name: 'Taxi Top',         image: null, quantityUnit: 'Slot',   durationUnit: 'Week',  campaignable: true,  createdAt: daysAgoISO(27), updatedAt: daysAgoISO(27), deletedAt: null },
@@ -194,7 +204,7 @@ const products: ProductRecord[] = [
   { id: nextId('product'), name: 'Taxi Top — Gojek Fleet B',           companyId: companies[1].id, categoryId: productCategories[1].id, image: null, quantityUnit: 'Slot',   durationUnit: 'Week', active: true,  prices: makePrices([0]      , 1000000), createdAt: daysAgoISO(11), updatedAt: daysAgoISO(9), deletedAt: null },
 ];
 
-const initialState: MasterState = { cities, brands, termMoments, termDues, priceTiers, productCategories, companies, products };
+const initialState: MasterState = { cities, brands, termMoments, termDues, priceTiers, industries, banks, productCategories, companies, products };
 
 const store = createStore<MasterState>(initialState);
 
@@ -202,9 +212,14 @@ export function useMasterData(): MasterState {
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
 }
 
+/** Non-reactive snapshot, for use outside components (validation, id lookups). */
+export function getMasterState(): MasterState {
+  return store.getState();
+}
+
 // ─── Generic helpers for simple text collections (City / Brand / Term Moment / Term Due / Price) ──
 
-type SimpleCollectionKey = 'cities' | 'brands' | 'termMoments' | 'termDues' | 'priceTiers';
+type SimpleCollectionKey = 'cities' | 'brands' | 'termMoments' | 'termDues' | 'priceTiers' | 'industries' | 'banks';
 
 export function isSimpleNameTaken(key: SimpleCollectionKey, name: string, excludeId?: string): boolean {
   const list = store.getState()[key];

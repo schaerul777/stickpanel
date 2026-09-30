@@ -28,6 +28,11 @@ import { BrandMaster } from './pages/master4/Brand';
 import { CityMaster } from './pages/master4/City';
 import { QuotationTermMomentMaster } from './pages/master4/QuotationTermMoment';
 import { QuotationTermDueMaster } from './pages/master4/QuotationTermDue';
+import { IndustryMaster } from './pages/master4/Industry';
+import { BankMaster } from './pages/master4/Bank';
+import { ClientProfileList } from './pages/master4/clientProfile/ClientProfileList';
+import { ClientProfileForm } from './pages/master4/clientProfile/ClientProfileForm';
+import { ClientProfileDetail } from './pages/master4/clientProfile/ClientProfileDetail';
 
 function RootLayout() {
   return (
@@ -91,6 +96,12 @@ export const router = createBrowserRouter([
           { path: 'master/product',                    Component: ProductList             },
           { path: 'master/product/new',                Component: ProductForm             },
           { path: 'master/product/:id/edit',            Component: ProductForm            },
+          { path: 'master/industry',                   Component: IndustryMaster          },
+          { path: 'master/bank',                       Component: BankMaster              },
+          { path: 'master/client-profile',             Component: ClientProfileList       },
+          { path: 'master/client-profile/new',         Component: ClientProfileForm       },
+          { path: 'master/client-profile/:id',         Component: ClientProfileDetail     },
+          { path: 'master/client-profile/:id/edit',    Component: ClientProfileForm       },
           { path: 'master/price',                      Component: PriceMaster             },
           { path: 'master/price-matrix',                Component: PriceMatrix            },
           { path: 'master/brand',                      Component: BrandMaster             },
