@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   X, Plus, Trash2, Copy, ChevronLeft, ChevronDown, Check,
-  AlertTriangle, Save, FileText, Printer, Info, Lock,
+  AlertTriangle, Save, FileText, Info, Lock, Upload, Image,
 } from 'lucide-react';
-import type { Quotation, ProductLineItem, PaymentTerm, QuotationTag, QuotationStatus } from '../pages/quotation-data';
+import type { Quotation, ProductLineItem, PaymentTerm, QuotationTag, QuotationStatus, QuotationAttachment } from '../pages/quotation-data';
 import {
   MASTER_PRODUCTS, SALES_PERSONS_LIST, CITIES, MILESTONE_OPTIONS,
   STATUS_CONFIG, formatIDR,
 } from '../pages/quotation-data';
+import { getClientsForCompany, getContactsForClient, useClientProfileData } from '../core/clientProfileStore';
+import { useClientProfileUI } from '../core/clientProfileUI';
+import { useMasterData } from '../core/masterStore';
 
 interface Props {
   quo: Quotation | null;
@@ -17,13 +20,16 @@ interface Props {
 }
 
 // Defined inline — no import dependency at module scope to avoid TDZ issues
+const TAG_COLOR = '#7C3AED';
+const TAG_BG    = 'rgba(124,58,237,0.1)';
+
 const ALL_TAGS: QuotationTag[] = [
-  { label: 'Urgent',     color: '#EF4444', bg: 'rgba(239,68,68,0.1)'   },
-  { label: 'High Value', color: '#CA8A04', bg: 'rgba(202,138,4,0.1)'   },
-  { label: 'Renewal',    color: '#2563EB', bg: 'rgba(37,99,235,0.1)'   },
-  { label: 'New Client', color: '#10B981', bg: 'rgba(16,185,129,0.1)'  },
-  { label: 'Corporate',  color: '#7C3AED', bg: 'rgba(124,58,237,0.1)'  },
-  { label: 'SME',        color: '#6B7280', bg: 'rgba(107,114,128,0.1)' },
+  { label: 'Urgent',     color: TAG_COLOR, bg: TAG_BG },
+  { label: 'High Value', color: TAG_COLOR, bg: TAG_BG },
+  { label: 'Renewal',    color: TAG_COLOR, bg: TAG_BG },
+  { label: 'New Client', color: TAG_COLOR, bg: TAG_BG },
+  { label: 'Corporate',  color: TAG_COLOR, bg: TAG_BG },
+  { label: 'SME',        color: TAG_COLOR, bg: TAG_BG },
 ];
 
 const DUE_DAYS_OPTIONS = [0, 3, 7, 14, 21, 30, 45, 60, 90];
@@ -40,95 +46,14 @@ const PAYMENT_DESCRIPTION_OPTIONS = [
 
 const UNIT_OPTIONS = ['spots', 'items', 'units'];
 
-// Typed outside JSX to avoid inline TypeScript `as` assertions inside TSX expressions
-const STATUS_PREVIEW_ROWS: Array<{ action: string; s: 'draft' | 'lead' }> = [
-  { action: 'Save as Draft', s: 'draft' },
-  { action: 'Save Quotation', s: 'lead' },
-];
-
-const MOCK_CLIENTS = [
-  {
-    id: 'CLT-10001', companyName: 'PT Kopi Kenangan Indonesia',
-    brands: [
-      { id: 'BRD-001-1', name: 'Kenangan Coffee' },
-      { id: 'BRD-001-2', name: 'Kenangan Gold' },
-      { id: 'BRD-001-3', name: 'Kenangan Signature' },
-    ],
-    contacts: [
-      { name: 'Sarah Johnson', email: 'sarah.j@kenangan.co.id',  role: 'Marketing Manager'    },
-      { name: 'Budi Santoso',  email: 'budi.s@kenangan.co.id',   role: 'Finance Manager'       },
-      { name: 'Rina Marlina',  email: 'rina.m@kenangan.co.id',   role: 'Campaign Coordinator'  },
-    ],
-  },
-  {
-    id: 'CLT-10002', companyName: 'PT Tokopedia Indonesia',
-    brands: [
-      { id: 'BRD-002-1', name: 'Tokopedia'     },
-      { id: 'BRD-002-2', name: 'GoTo Financial' },
-    ],
-    contacts: [
-      { name: 'Budi Santoso', email: 'budi.santoso@tokopedia.com', role: 'Partnership Manager' },
-      { name: 'Clara Tan',    email: 'clara.tan@tokopedia.com',    role: 'Marketing Lead'      },
-    ],
-  },
-  {
-    id: 'CLT-10003', companyName: 'PT Gojek Indonesia',
-    brands: [
-      { id: 'BRD-003-1', name: 'Gojek'  },
-      { id: 'BRD-003-2', name: 'GoFood' },
-      { id: 'BRD-003-3', name: 'GoPay'  },
-    ],
-    contacts: [
-      { name: 'Kevin Lauw',  email: 'kevin.l@gojek.com',  role: 'Partnership Director' },
-      { name: 'Ratna Dewi',  email: 'ratna.d@gojek.com',  role: 'Brand Manager'        },
-    ],
-  },
-  {
-    id: 'CLT-10004', companyName: 'PT Unilever Indonesia',
-    brands: [
-      { id: 'BRD-004-1', name: 'Dove'     },
-      { id: 'BRD-004-2', name: 'Lifebuoy' },
-      { id: 'BRD-004-3', name: 'Sunsilk'  },
-      { id: 'BRD-004-4', name: 'Rexona'   },
-    ],
-    contacts: [
-      { name: 'Lina Kusuma',   email: 'lina.k@unilever.com',  role: 'Campaign Lead'  },
-      { name: 'Maria Susanti', email: 'maria.s@unilever.com', role: 'Brand Manager'  },
-    ],
-  },
-  {
-    id: 'CLT-10005', companyName: 'PT Astra International',
-    brands: [
-      { id: 'BRD-005-1', name: 'Toyota'   },
-      { id: 'BRD-005-2', name: 'Daihatsu' },
-    ],
-    contacts: [
-      { name: 'Bambang Irawan', email: 'bambang.i@astra.co.id', role: 'Marketing Manager'  },
-      { name: 'Robert Halim',   email: 'robert.h@astra.co.id',  role: 'Marketing Director' },
-    ],
-  },
-  {
-    id: 'CLT-10006', companyName: 'PT Bank Central Asia',
-    brands: [
-      { id: 'BRD-006-1', name: 'BCA'         },
-      { id: 'BRD-006-2', name: 'BCA Digital' },
-      { id: 'BRD-006-3', name: 'Blu by BCA'  },
-    ],
-    contacts: [
-      { name: 'Anwar Prasetyo', email: 'anwar.p@bca.co.id', role: 'Digital Marketing Head' },
-      { name: 'Bella Oktavia',  email: 'bella.o@bca.co.id', role: 'Campaign Manager'        },
-    ],
-  },
-];
-
 const emptyProduct = (): ProductLineItem => ({
   id: `p${Date.now()}`, product:'', category:'', quantity:1, unit:'spots',
   duration:1, durationUnit:'months', city:'Jakarta', ratePrice:0, finalPrice:0,
-  campaignStart:'', campaignEnd:'', notes:'',
+  startDate:'', notes:'', description: '', discount: 0,
 });
 
 const emptyPaymentTerm = (): PaymentTerm => ({
-  id: `pt${Date.now()}`, name:'', percentage:100, milestone:'After Quotation Signed', dueDays:7, amount:0,
+  id: `pt${Date.now()}`, name:'', percent:100, masQuotationTermMoment_id:'After Quotation Signed', masQuotationTermDue_id:'7', amount:0,
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -201,22 +126,80 @@ const sectionHead: React.CSSProperties = {
 
 // ── Tag Selector ───────────────────────────────────────────────────────────────
 
+
 function TagSelector({ selected, onChange }: { selected:QuotationTag[]; onChange:(t:QuotationTag[])=>void }) {
+  const [newTag, setNewTag] = useState('');
+  const [customTags, setCustomTags] = useState<QuotationTag[]>([]);
+
+  // Merge preset + custom tags, deduped by label
+  const allAvailable = useMemo(() => {
+    const merged = [...ALL_TAGS];
+    for (const ct of customTags) {
+      if (!merged.some(t => t.label.toLowerCase() === ct.label.toLowerCase())) merged.push(ct);
+    }
+    // Also include any selected tags not in the presets (e.g. from a previously saved quotation)
+    for (const st of selected) {
+      if (!merged.some(t => t.label.toLowerCase() === st.label.toLowerCase())) merged.push(st);
+    }
+    return merged;
+  }, [customTags, selected]);
+
   const toggle = (tag:QuotationTag) => {
     const exists = selected.find(t=>t.label===tag.label);
     onChange(exists ? selected.filter(t=>t.label!==tag.label) : [...selected, tag]);
   };
+
+  const handleAddTag = () => {
+    const label = newTag.trim();
+    if (!label) return;
+    if (allAvailable.some(t => t.label.toLowerCase() === label.toLowerCase())) {
+      // Tag already exists — just select it
+      const existing = allAvailable.find(t => t.label.toLowerCase() === label.toLowerCase())!;
+      if (!selected.some(t => t.label === existing.label)) {
+        onChange([...selected, existing]);
+      }
+    } else {
+      // Create new tag
+      const newTagObj: QuotationTag = { label, color: TAG_COLOR, bg: TAG_BG };
+      setCustomTags(prev => [...prev, newTagObj]);
+      onChange([...selected, newTagObj]);
+    }
+    setNewTag('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); }
+  };
+
   return (
-    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-      {ALL_TAGS.map(tag=>{
-        const active = !!selected.find(t=>t.label===tag.label);
-        return (
-          <button key={tag.label} onClick={()=>toggle(tag)} type="button"
-            style={{ padding:'4px 10px', borderRadius:'999px', border: active?'none':'1px solid var(--color-border)', backgroundColor: active?tag.bg:'transparent', color: active?tag.color:'var(--color-muted-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight: active?700:400, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all 0.15s' }}>
-            {active&&<Check size={10}/>} {tag.label}
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+        {allAvailable.map(tag => {
+          const active = !!selected.find(t => t.label === tag.label);
+          return (
+            <button key={tag.label} onClick={() => toggle(tag)} type="button"
+              style={{ padding:'4px 10px', borderRadius:'999px', border: active ? 'none' : '1px solid var(--color-border)', backgroundColor: active ? tag.bg : 'transparent', color: active ? tag.color : 'var(--color-muted-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight: active ? 700 : 400, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all 0.15s' }}>
+              {active && <Check size={10} />} {tag.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+        <input
+          type="text"
+          value={newTag}
+          onChange={e => setNewTag(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a new tag and press Enter..."
+          style={{ flex:1, padding:'6px 10px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-input-background)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'12px', outline:'none', boxSizing:'border-box' }}
+        />
+        {newTag.trim() && (
+          <button type="button" onClick={handleAddTag}
+            style={{ padding:'5px 10px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#7C3AED', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:4, whiteSpace:'nowrap' }}>
+            <Plus size={11} /> Add
           </button>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 }
@@ -331,14 +314,10 @@ function ProductRow({ item, idx, onChange, onRemove, onDuplicate, grandTotal }:{
           {discPct>0&&<div style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'#F59E0B', marginTop:3 }}>{discPct}% discount applied</div>}
         </div>
 
-        {/* Campaign Period */}
+        {/* Start Date */}
         <div>
-          <label style={labelStyle}>Campaign Start <span style={{color:'#EF4444'}}>*</span></label>
-          <input type="date" value={item.campaignStart} onChange={e=>setField('campaignStart',e.target.value)} style={{...inputStyle}}/>
-        </div>
-        <div>
-          <label style={labelStyle}>Campaign End <span style={{color:'#EF4444'}}>*</span></label>
-          <input type="date" value={item.campaignEnd} onChange={e=>setField('campaignEnd',e.target.value)} style={{...inputStyle}}/>
+          <label style={labelStyle}>Start Date <span style={{color:'#EF4444'}}>*</span></label>
+          <input type="date" value={item.startDate} onChange={e=>setField('startDate',e.target.value)} style={{...inputStyle}}/>
         </div>
 
         {/* Subtotal */}
@@ -368,7 +347,7 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
   onChange:(id:string,field:string,val:any)=>void;
   onRemove:(id:string)=>void;
 }) {
-  const amount = Math.round(grandTotal * (term.percentage/100));
+  const amount = Math.round(grandTotal * (term.percent/100));
   const setField = (field:string, val:any) => onChange(term.id, field, val);
   return (
     <div style={{ border:'1px solid var(--color-border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:10 }}>
@@ -389,13 +368,13 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
         <div>
           <label style={labelStyle}>Percentage <span style={{color:'#EF4444'}}>*</span></label>
           <div style={{ position:'relative' }}>
-            <input type="number" min="0" max="100" value={term.percentage} onChange={e=>setField('percentage',Math.min(100,Math.max(0,parseInt(e.target.value)||0)))} style={{...inputStyle, paddingRight:24}}/>
+            <input type="number" min="0" max="100" value={term.percent} onChange={e=>setField('percent',Math.min(100,Math.max(0,parseInt(e.target.value)||0)))} style={{...inputStyle, paddingRight:24}}/>
             <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-muted-foreground)' }}>%</span>
           </div>
         </div>
         <div>
           <label style={labelStyle}>Due Days</label>
-          <StyledSelect value={term.dueDays} onChange={e=>setField('dueDays',parseInt(e.target.value))}>
+          <StyledSelect value={term.masQuotationTermDue_id} onChange={e=>setField('masQuotationTermDue_id',e.target.value)}>
             {DUE_DAYS_OPTIONS.map(d=><option key={d} value={d}>{d} days</option>)}
           </StyledSelect>
         </div>
@@ -407,7 +386,7 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
         </div>
         <div style={{ gridColumn:'1 / -1' }}>
           <label style={labelStyle}>Milestone <span style={{color:'#EF4444'}}>*</span></label>
-          <StyledSelect value={term.milestone} onChange={e=>setField('milestone',e.target.value)}>
+          <StyledSelect value={term.masQuotationTermMoment_id} onChange={e=>setField('masQuotationTermMoment_id',e.target.value)}>
             {MILESTONE_OPTIONS.map(m=><option key={m} value={m}>{m}</option>)}
           </StyledSelect>
         </div>
@@ -420,6 +399,10 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
 
 export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   const isEdit = !!quo;
+  const { activeCompanyId } = useClientProfileUI();
+  useClientProfileData();
+  const masterData = useMasterData();
+  const clientsForCompany = getClientsForCompany(activeCompanyId);
 
   // Basic Info
   const [clientId,       setClientId]       = useState(quo?.clientId       || '');
@@ -428,18 +411,18 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   const [contactEmail,   setContactEmail]   = useState(quo?.contactEmail   || '');
   const [salesPersonId,  setSalesPersonId]  = useState(quo?.salesPerson.id || SALES_PERSONS_LIST[0].id);
   const [quoteName,      setQuoteName]      = useState(quo?.quoteName      || '');
-  const [status,         setStatus]         = useState<QuotationStatus>(quo?.status || 'draft');
+  const [status,         setStatus]         = useState<QuotationStatus>(quo?.status || 'lead');
   const [validUntil,     setValidUntil]     = useState(quo?.validUntil     || '');
   const [tags,           setTags]           = useState<QuotationTag[]>(quo?.tags || []);
 
   // Products
   const [products, setProducts] = useState<ProductLineItem[]>(quo?.products?.length ? quo.products : [emptyProduct()]);
 
-  // Pricing
-  const [discountInput,  setDiscountInput]  = useState(quo ? formattedIDR(quo.discount) : '');
-
   // Payment Terms
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>(quo?.paymentTerms?.length ? quo.paymentTerms : [emptyPaymentTerm()]);
+
+  // Attachments
+  const [attachments, setAttachments] = useState<QuotationAttachment[]>(quo?.attachments || []);
 
   // Terms text
   const [addNotes,   setAddNotes]   = useState(quo?.additionalNotes    || '');
@@ -450,18 +433,20 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const selectedClient = MOCK_CLIENTS.find(c=>c.id===clientId);
-  const selectedBrand  = selectedClient?.brands.find(b=>b.id===brandId);
+  const selectedClient = clientsForCompany.find(c => c.id === clientId);
+  const selectedBrand  = masterData.brands.find(b => b.id === brandId);
+  const clientContacts = clientId ? getContactsForClient(clientId) : [];
   const selectedSales  = SALES_PERSONS_LIST.find(s=>s.id===salesPersonId) || SALES_PERSONS_LIST[0];
 
   // Calculated values
+  const subtotalRate = products.reduce((s,p)=>s + p.quantity*p.ratePrice*p.duration, 0);
   const subtotal = products.reduce((s,p)=>s + p.quantity*p.finalPrice*p.duration, 0);
-  const discount = parseIDR(discountInput);
-  const totalAfterDiscount = Math.max(0, subtotal - discount);
+  const discount = subtotalRate - subtotal;
+  const totalAfterDiscount = subtotal;
   const vat = Math.round(totalAfterDiscount * VAT_RATE);
   const grandTotal = totalAfterDiscount + vat;
 
-  const ptTotal = paymentTerms.reduce((s,t)=>s+t.percentage,0);
+  const ptTotal = paymentTerms.reduce((s,t)=>s+t.percent,0);
   const ptValid = ptTotal===100 || paymentTerms.length===0;
 
   // Product handlers
@@ -506,21 +491,30 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
     return errs;
   };
 
-  const handleSave = (saveStatus: QuotationStatus = 'lead') => {
+  const handleSave = () => {
     const errs = validate();
     if(errs.length) { setErrors(errs); return; }
     setSaving(true);
-    const client = MOCK_CLIENTS.find(c=>c.id===clientId);
+    const client = clientsForCompany.find(c => c.id === clientId);
     const vDate = new Date(validUntil || new Date());
-    // Preserve terminal statuses on edit — only draft/lead can transition via save actions
+    // Preserve terminal statuses on edit — signed/salesOrder can only be changed via system actions
+    const ptTotal = paymentTerms.reduce((s,t)=>s+t.percent,0);
+    const autoStatus: QuotationStatus =
+      products.length > 0 && products.every(p => p.product) && ptTotal === 100 ? 'filled' : 'lead';
     const finalStatus: QuotationStatus =
-      isEdit && (quo.status === 'won' || quo.status === 'lost' || quo.status === 'expired')
+      isEdit && (quo.status === 'signed' || quo.status === 'salesOrder')
         ? quo.status
-        : saveStatus;
+        : autoStatus;
     const newQuo: Quotation = {
       id:   quo?.id   || `QUO-2025-${String(Math.floor(Math.random()*90000)+10000)}`,
-      quoNo:quo?.quoNo|| `QUO-2025-${String(Math.floor(Math.random()*90000)+10000)}`,
-      clientName: client?.companyName || '',
+      quotationNumber:quo?.quotationNumber|| `QUO-2025-${String(Math.floor(Math.random()*90000)+10000)}`,
+      quotationNumberRev: quo?.quotationNumberRev || '',
+      masCompany_id: activeCompanyId,
+      setClientProfile_id: clientId,
+      setClientContact_id: quo?.setClientContact_id || '',
+      setClientBilling_id: quo?.setClientBilling_id || '',
+      masBrand_id: quo?.masBrand_id || '',
+      clientName: client?.name || '',
       clientBrand: selectedBrand?.name || '',
       clientId,
       brandId,
@@ -534,8 +528,12 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
       validUntilDate: vDate,
       createdDate: quo?.createdDate || new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
       createdDateObj: quo?.createdDateObj || new Date(),
+      image: quo?.image || null,
+      appToDate: quo?.appToDate || null,
+      cancelledAt: quo?.cancelledAt || null,
       products,
-      paymentTerms: paymentTerms.map(pt=>({...pt,amount:Math.round(grandTotal*(pt.percentage/100))})),
+      paymentTerms: paymentTerms.map(pt=>({...pt,amount:Math.round(grandTotal*(pt.percent/100))})),
+      attachments,
       additionalNotes: addNotes,
       cancellationPolicy: cancelPol,
       termsAndConditions: termsText,
@@ -543,8 +541,6 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
     setTimeout(()=>{ onSave(newQuo); setSaving(false); },400);
   };
 
-  const handleSaveDraft = () => handleSave('draft');
-  const handleSavePrint = () => handleSave('lead');
 
   const sectionHeadTitle = (title:string, badge?:React.ReactNode) => (
     <div style={sectionHead}>
@@ -567,17 +563,14 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
             </button>
             <span style={{ color:'var(--color-muted-foreground)' }}>/</span>
             <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, color:'var(--color-foreground)' }}>
-              {isEdit ? `Edit ${quo.quoNo}` : 'Create New Quotation'}
+              {isEdit ? `Edit ${quo.quotationNumber}` : 'Create New Quotation'}
             </span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             {saving&&<span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>Saving...</span>}
             <button onClick={onClose} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, cursor:'pointer' }}>Cancel</button>
-            <button onClick={handleSaveDraft} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'1px solid #7C3AED', backgroundColor:'transparent', color:'#7C3AED', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-              <Save size={13}/> Save as Draft
-            </button>
-            <button onClick={handleSavePrint} style={{ padding:'8px 16px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#7C3AED', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-              <Printer size={13}/> Save Quotation
+            <button onClick={handleSave} style={{ padding:'8px 16px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#7C3AED', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+              <Save size={13}/> Save Quotation
             </button>
           </div>
         </div>
@@ -606,7 +599,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                 <div>
                   <label style={labelStyle}>Quotation Number</label>
                   <div style={{ padding:'9px 12px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', fontFamily:'monospace', fontSize:'var(--text-14)', fontWeight:700, color:'var(--color-muted-foreground)' }}>
-                    {isEdit ? quo.quoNo : 'Auto-generated on save'}
+                    {isEdit ? quo.quotationNumber : 'Auto-generated on save'}
                   </div>
                 </div>
 
@@ -614,25 +607,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                 <div>
                   <label style={labelStyle}>Status</label>
 
-                  {!isEdit ? (
-                    /* New quotation: preview what each save action produces */
-                    <div style={{ borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', overflow:'hidden' }}>
-                      <div style={{ padding:'8px 12px', borderBottom:'1px solid var(--color-border)', display:'flex', alignItems:'center', gap:6 }}>
-                        <Info size={12} style={{ color:'var(--color-muted-foreground)', flexShrink:0 }}/>
-                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>Assigned automatically by your save action</span>
-                      </div>
-                      {STATUS_PREVIEW_ROWS.map((row, i) => {
-                        const cfg = STATUS_CONFIG[row.s];
-                        return (
-                          <div key={row.s} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', borderBottom:i===0?'1px solid var(--color-border)':'none' }}>
-                            <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>{row.action}</span>
-                            <span style={{ display:'inline-flex', alignItems:'center', padding:'3px 9px', borderRadius:'999px', backgroundColor:cfg.bg, border:cfg.border||'none', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:700, color:cfg.color }}>{cfg.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                  ) : (status === 'won' || status === 'lost' || status === 'expired') ? (
+                  {(isEdit && (status === 'signed' || status === 'salesOrder')) ? (
                     /* Locked terminal status */
                     <div style={{ borderRadius:'var(--radius)', border:`1px solid ${STATUS_CONFIG[status].color}40`, backgroundColor:STATUS_CONFIG[status].bg, padding:'10px 12px', display:'flex', flexDirection:'column', gap:8 }}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -646,15 +621,17 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                     </div>
 
                   ) : (
-                    /* Draft / Lead — transitions via save action */
+                    /* Auto-determined Lead / Filled */
                     <div style={{ borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', overflow:'hidden' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 12px', borderBottom:'1px solid var(--color-border)' }}>
-                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>Current Status</span>
-                        <span style={{ display:'inline-flex', alignItems:'center', padding:'3px 9px', borderRadius:'999px', backgroundColor:STATUS_CONFIG[status].bg, border:STATUS_CONFIG[status].border||'none', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:700, color:STATUS_CONFIG[status].color }}>{STATUS_CONFIG[status].label}</span>
-                      </div>
+                      {isEdit && (
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'9px 12px', borderBottom:'1px solid var(--color-border)' }}>
+                          <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>Current Status</span>
+                          <span style={{ display:'inline-flex', alignItems:'center', padding:'3px 9px', borderRadius:'999px', backgroundColor:STATUS_CONFIG[status].bg, border:STATUS_CONFIG[status].border||'none', fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:700, color:STATUS_CONFIG[status].color }}>{STATUS_CONFIG[status].label}</span>
+                        </div>
+                      )}
                       <div style={{ padding:'8px 12px', display:'flex', alignItems:'flex-start', gap:5 }}>
                         <Info size={12} style={{ color:'var(--color-muted-foreground)', flexShrink:0, marginTop:1 }}/>
-                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)', lineHeight:1.5 }}>Use "Save as Draft" to keep as Draft, or "Save Quotation" to publish as Lead.</span>
+                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)', lineHeight:1.5 }}>Status is set automatically: <strong>Filled</strong> when all products are selected and payment terms total 100%, otherwise <strong>Lead</strong>.</span>
                       </div>
                     </div>
                   )}
@@ -662,34 +639,25 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
 
                 {/* Client */}
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={labelStyle}>Company <span style={{color:'#EF4444'}}>*</span></label>
+                  <label style={labelStyle}>Client <span style={{color:'#EF4444'}}>*</span></label>
                   <StyledSelect value={clientId} onChange={e=>handleClientChange(e.target.value)} style={{borderColor:errors.some(e=>e.includes('Client'))?'#EF4444':'var(--color-border)'}}>
-                    <option value="">Select a company...</option>
-                    {MOCK_CLIENTS.map(c=><option key={c.id} value={c.id}>{c.companyName}</option>)}
+                    <option value="">Select a client...</option>
+                    {clientsForCompany.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                   </StyledSelect>
-                  {selectedClient&&(
-                    <div style={{ marginTop:8, padding:'10px 12px', borderRadius:'var(--radius)', border:'1px solid rgba(124,58,237,0.2)', backgroundColor:'rgba(124,58,237,0.04)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <div>
-                        <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, color:'var(--color-foreground)' }}>{selectedClient.companyName}</div>
-                        <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>{selectedClient.brands.length} brand{selectedClient.brands.length !== 1 ? 's' : ''} · {selectedClient.id}</div>
-                      </div>
-                      <button type="button" onClick={()=>{ setClientId(''); setBrandId(''); setContactPerson(''); setContactEmail(''); }} style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'#7C3AED', border:'none', background:'none', cursor:'pointer' }}>Change</button>
-                    </div>
-                  )}
                 </div>
 
-                {/* Brand — cascades from Company */}
+                {/* Brand — cascades from Client */}
                 {selectedClient && (
                   <div style={{ gridColumn:'1 / -1' }}>
                     <label style={labelStyle}>Brand <span style={{color:'#EF4444'}}>*</span></label>
                     <StyledSelect value={brandId} onChange={e=>handleBrandChange(e.target.value)} style={{borderColor:errors.some(e=>e.includes('Brand'))?'#EF4444':'var(--color-border)'}}>
                       <option value="">Select a brand...</option>
-                      {selectedClient.brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                      {masterData.brands.filter(b => !b.deletedAt).map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                     </StyledSelect>
                     {selectedBrand && (
                       <div style={{ marginTop:6, display:'flex', alignItems:'center', gap:6 }}>
                         <div style={{ width:8, height:8, borderRadius:'50%', backgroundColor:'#7C3AED' }} />
-                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>{selectedBrand.name} · under {selectedClient.companyName}</span>
+                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>{selectedBrand.name}</span>
                       </div>
                     )}
                   </div>
@@ -702,11 +670,11 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                     <StyledSelect value={contactPerson}
                       onChange={e=>{
                         setContactPerson(e.target.value);
-                        const c=selectedClient.contacts.find(cx=>cx.name===e.target.value);
+                        const c=clientContacts.find(cx=>cx.name===e.target.value);
                         if(c) setContactEmail(c.email);
                       }}>
                       <option value="">Select a contact...</option>
-                      {selectedClient.contacts.map(c=><option key={c.name} value={c.name}>{c.name} ({c.role}) — {c.email}</option>)}
+                      {clientContacts.map(c=><option key={c.id} value={c.name}>{c.name} ({c.position}) — {c.email}</option>)}
                     </StyledSelect>
                   </div>
                 )}
@@ -719,12 +687,6 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                       <option key={s.id} value={s.id}>{s.name} ({s.initials})</option>
                     ))}
                   </StyledSelect>
-                  {selectedSales&&(
-                    <div style={{ marginTop:6, display:'flex', alignItems:'center', gap:6 }}>
-                      <SalesAvatar initials={selectedSales.initials} size={22}/>
-                      <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>{selectedSales.name}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Valid Until */}
@@ -783,14 +745,8 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                 {/* Pricing table */}
                 <div style={{ padding:'16px 20px 0', borderBottom:'1px solid var(--color-border)' }}>
                   {[
-                    { label:'Subtotal',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-foreground)'}}>{formatIDR(subtotal)}</span>, editable:false },
-                    { label:'Discount',             valueNode:
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-muted-foreground)', flexShrink:0 }}>Rp</span>
-                        <input type="text" value={discountInput} onChange={e=>setDiscountInput(e.target.value)}
-                          placeholder="0"
-                          style={{ width:160, padding:'6px 10px', borderRadius:'var(--radius-sm)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-input-background)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', outline:'none' }}/>
-                      </div>, editable:true },
+                    { label:'Subtotal',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-foreground)'}}>{formatIDR(subtotalRate)}</span>, editable:false },
+                    { label:'Discount',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:discount>0?'#F59E0B':'var(--color-muted-foreground)'}}>{discount>0?`− ${formatIDR(discount)}`:'Rp 0'}</span>, editable:false },
                     { label:'Total After Discount', valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-foreground)'}}>{formatIDR(totalAfterDiscount)}</span>, editable:false },
                     { label:'VAT (11%)',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-muted-foreground)'}}>{formatIDR(vat)}</span>, editable:false },
                   ].map(row=>(
@@ -857,6 +813,95 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
               </div>
             </div>
 
+            {/* ── Section 5: Attachments ── */}
+            <div style={sectionCard}>
+              {sectionHeadTitle('Attachments', <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'var(--color-muted-foreground)' }}>JPG, PNG, PDF only</span>)}
+              <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:12 }}>
+                {/* Drop zone / upload button */}
+                <label style={{
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8,
+                  padding:'24px 16px', borderRadius:'var(--radius)', border:'2px dashed var(--color-border)',
+                  backgroundColor:'var(--color-secondary)', cursor:'pointer', transition:'border-color 0.15s',
+                }}
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#7C3AED'; }}
+                  onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = 'var(--color-border)';
+                    const files = Array.from(e.dataTransfer.files).filter(f =>
+                      ['image/jpeg','image/png','application/pdf'].includes(f.type)
+                    );
+                    const newAttachments: QuotationAttachment[] = files.map(f => ({
+                      id: `att-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+                      name: f.name, size: f.size, type: f.type,
+                    }));
+                    setAttachments(prev => [...prev, ...newAttachments]);
+                  }}
+                >
+                  <Upload size={20} style={{ color:'var(--color-muted-foreground)' }} />
+                  <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-muted-foreground)' }}>
+                    Drag & drop files here, or <span style={{ color:'#7C3AED', fontWeight:600 }}>browse</span>
+                  </span>
+                  <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'var(--color-muted-foreground)' }}>
+                    Accepted: JPG, PNG, PDF
+                  </span>
+                  <input type="file" accept=".jpg,.jpeg,.png,.pdf" multiple
+                    style={{ display:'none' }}
+                    onChange={e => {
+                      const files = Array.from(e.target.files || []);
+                      const newAttachments: QuotationAttachment[] = files.map(f => ({
+                        id: `att-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+                        name: f.name, size: f.size, type: f.type,
+                      }));
+                      setAttachments(prev => [...prev, ...newAttachments]);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+
+                {/* Attachment list */}
+                {attachments.length > 0 && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {attachments.map(att => {
+                      const isImage = att.type.startsWith('image/');
+                      const sizeStr = att.size < 1024*1024
+                        ? `${(att.size/1024).toFixed(1)} KB`
+                        : `${(att.size/(1024*1024)).toFixed(1)} MB`;
+                      return (
+                        <div key={att.id} style={{
+                          display:'flex', alignItems:'center', gap:10, padding:'8px 12px',
+                          borderRadius:'var(--radius)', border:'1px solid var(--color-border)',
+                          backgroundColor:'var(--color-card)',
+                        }}>
+                          <div style={{
+                            width:32, height:32, borderRadius:'var(--radius-sm)',
+                            backgroundColor: isImage ? 'rgba(37,99,235,0.1)' : 'rgba(239,68,68,0.1)',
+                            display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+                          }}>
+                            {isImage
+                              ? <Image size={14} style={{ color:'#2563EB' }} />
+                              : <FileText size={14} style={{ color:'#EF4444' }} />
+                            }
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, color:'var(--color-foreground)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{att.name}</div>
+                            <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'var(--color-muted-foreground)' }}>{sizeStr}</div>
+                          </div>
+                          <button type="button" onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                            style={{ width:28, height:28, borderRadius:'var(--radius-sm)', border:'1px solid var(--color-border)', backgroundColor:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--color-muted-foreground)', flexShrink:0 }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.borderColor = '#EF4444'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-muted-foreground)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Bottom spacer */}
             <div style={{ height:20 }}/>
           </div>
@@ -866,9 +911,6 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
         <div style={{ flexShrink:0, padding:'14px 32px', borderTop:'1px solid var(--color-border)', backgroundColor:'var(--color-card)', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:1 }}>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={onClose} style={{ padding:'9px 16px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, cursor:'pointer' }}>Cancel</button>
-            <button onClick={handleSaveDraft} style={{ padding:'9px 16px', borderRadius:'var(--radius)', border:'1px solid #7C3AED', backgroundColor:'transparent', color:'#7C3AED', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-              <Save size={13}/> Save as Draft
-            </button>
           </div>
           <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>
             Grand Total: <strong style={{color:'#10B981'}}>{formatIDR(grandTotal)}</strong>
@@ -877,9 +919,9 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
             <button style={{ padding:'9px 16px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
               <FileText size={13}/> Preview PDF
             </button>
-            <button onClick={handleSavePrint}
+            <button onClick={handleSave}
               style={{ padding:'9px 18px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#7C3AED', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-              <Printer size={14}/> Save Quotation
+              <Save size={14}/> Save Quotation
             </button>
           </div>
         </div>

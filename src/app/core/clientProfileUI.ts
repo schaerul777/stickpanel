@@ -19,6 +19,18 @@ export const PERMISSION_KEYS = [
   'client-billing:write',
   'client-bank-account:read',
   'client-bank-account:write',
+  'quotationnumber:read',
+  'quotationnumber:write',
+  'quotationnumber:select-sales',
+  'quotationnumber:custom-price',
+  'quotationnumber:edit-number',
+  'quotationnumber:convert-signed',
+  'quotationnumber:convert-so',
+  'quotationnumber:delete',
+  'quotationnumber.attachment:read',
+  'quotationnumber.attachment:write',
+  'quotationnumber.attachment:delete',
+  'client-quotation:read',
 ] as const;
 
 export type PermissionKey = typeof PERMISSION_KEYS[number];
@@ -33,6 +45,18 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   'client-billing:write': 'Create / edit / delete billing',
   'client-bank-account:read': 'View bank accounts',
   'client-bank-account:write': 'Create / edit / delete bank account',
+  'quotationnumber:read': 'View quotations / PDF / export',
+  'quotationnumber:write': 'Create and edit quotations',
+  'quotationnumber:select-sales': 'Change sales person on quotation',
+  'quotationnumber:custom-price': 'Override rate-card price',
+  'quotationnumber:edit-number': 'Edit quotation number',
+  'quotationnumber:convert-signed': 'Convert to signed quote',
+  'quotationnumber:convert-so': 'Convert to Sales Order',
+  'quotationnumber:delete': 'Delete quotation',
+  'quotationnumber.attachment:read': 'View attachments',
+  'quotationnumber.attachment:write': 'Upload attachments',
+  'quotationnumber.attachment:delete': 'Delete attachments',
+  'client-quotation:read': 'View quotations tab on Client Profile',
 };
 
 type Listener = () => void;

@@ -22,7 +22,6 @@ import { CompanyForm } from './pages/master4/CompanyForm';
 import { ProductCategoryMaster } from './pages/master4/ProductCategory';
 import { ProductList } from './pages/master4/ProductList';
 import { ProductForm } from './pages/master4/ProductForm';
-import { PriceMaster } from './pages/master4/Price';
 import { PriceMatrix } from './pages/master4/PriceMatrix';
 import { BrandMaster } from './pages/master4/Brand';
 import { CityMaster } from './pages/master4/City';
@@ -89,6 +88,7 @@ export const router = createBrowserRouter([
         Component: MainLayout,
         children: [
           { index: true,                              element: <Navigate to={CORE_META['core-4'].defaultPath} replace /> },
+          { path: 'quotation',                        Component: Quotation                },
           { path: 'master/company',                   Component: CompanyList              },
           { path: 'master/company/new',                Component: CompanyForm             },
           { path: 'master/company/:id/edit',           Component: CompanyForm             },
@@ -102,7 +102,6 @@ export const router = createBrowserRouter([
           { path: 'master/client-profile/new',         Component: ClientProfileForm       },
           { path: 'master/client-profile/:id',         Component: ClientProfileDetail     },
           { path: 'master/client-profile/:id/edit',    Component: ClientProfileForm       },
-          { path: 'master/price',                      Component: PriceMaster             },
           { path: 'master/price-matrix',                Component: PriceMatrix            },
           { path: 'master/brand',                      Component: BrandMaster             },
           { path: 'master/city',                       Component: CityMaster              },

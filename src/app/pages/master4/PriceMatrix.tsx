@@ -4,10 +4,10 @@ import { PageHeader } from '../../components/master/PageHeader';
 import { EmptyState } from '../../components/EmptyState';
 import { inputStyle, selectStyle, primaryButtonStyle, secondaryButtonStyle } from '../../components/master/styles';
 import { useToast, ToastContainer } from '../../components/Toast';
-import { useMasterData, setProductPrice, formatIDR } from '../../core/masterStore';
+import { useMasterData, setProductCityPrice, formatIDR } from '../../core/masterStore';
 
-function cellKey(productId: string, tierId: string) {
-  return `${productId}::${tierId}`;
+function cellKey(productId: string, cityId: string) {
+  return `${productId}::${cityId}`;
 }
 
 export function PriceMatrix() {
@@ -20,7 +20,7 @@ export function PriceMatrix() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pct, setPct] = useState('10');
 
-  const activeTiers = data.priceTiers.filter(t => !t.deletedAt);
+  const activeCities = data.cities.filter(c => !c.deletedAt);
   const companyById = useMemo(() => new Map(data.companies.map(c => [c.id, c])), [data.companies]);
   const categoryById = useMemo(() => new Map(data.productCategories.map(c => [c.id, c])), [data.productCategories]);
 
@@ -31,21 +31,20 @@ export function PriceMatrix() {
     .sort((a, b) => a.name.localeCompare(b.name)),
   [data.products, companyFilter, categoryFilter]);
 
-  const getValue = (productId: string, tierId: string): number | null => {
-    const key = cellKey(productId, tierId);
+  const getValue = (productId: string, cityId: string): number | null => {
+    const key = cellKey(productId, cityId);
     if (key in pending) return pending[key];
-    const product = data.products.find(p => p.id === productId);
-    const entry = product?.prices.find(pr => pr.priceTierId === tierId);
+    const entry = data.productPrices.find(p => p.productId === productId && p.cityId === cityId);
     return entry ? entry.price : null;
   };
 
-  const setPendingValue = (productId: string, tierId: string, value: number | null) => {
-    const key = cellKey(productId, tierId);
+  const setPendingValue = (productId: string, cityId: string, value: number | null) => {
+    const key = cellKey(productId, cityId);
     setPending(prev => ({ ...prev, [key]: value ?? 0 }));
   };
 
-  const toggleSelect = (productId: string, tierId: string) => {
-    const key = cellKey(productId, tierId);
+  const toggleSelect = (productId: string, cityId: string) => {
+    const key = cellKey(productId, cityId);
     setSelected(prev => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
@@ -57,8 +56,8 @@ export function PriceMatrix() {
 
   const handleSave = () => {
     Object.entries(pending).forEach(([key, value]) => {
-      const [productId, tierId] = key.split('::');
-      setProductPrice(productId, tierId, value);
+      const [productId, cityId] = key.split('::');
+      setProductCityPrice(productId, cityId, value);
     });
     showToast('success', 'Prices saved', `${changeCount} price${changeCount === 1 ? '' : 's'} updated.`);
     setPending({});
@@ -75,8 +74,8 @@ export function PriceMatrix() {
     if (isNaN(p) || selected.size === 0) return;
     const updates: Record<string, number> = {};
     selected.forEach(key => {
-      const [productId, tierId] = key.split('::');
-      const current = getValue(productId, tierId) ?? 0;
+      const [productId, cityId] = key.split('::');
+      const current = getValue(productId, cityId) ?? 0;
       updates[key] = Math.max(0, current * (1 + p / 100));
     });
     setPending(prev => ({ ...prev, ...updates }));
@@ -89,7 +88,7 @@ export function PriceMatrix() {
         core="core-4"
         trail={['Master', 'Price Matrix']}
         title="Price Matrix"
-        subtitle="Bulk-edit product prices across every price tier"
+        subtitle="Bulk-edit product prices across every city"
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: 16, backgroundColor: 'var(--color-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', marginBottom: 16 }}>
@@ -132,9 +131,9 @@ export function PriceMatrix() {
                 <th style={{ padding: '12px 16px', textAlign: 'left', position: 'sticky', left: 0, backgroundColor: 'var(--color-secondary)', fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 600, color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Product
                 </th>
-                {activeTiers.map(t => (
-                  <th key={t.id} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 600, color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                    {t.name}
+                {activeCities.map(c => (
+                  <th key={c.id} style={{ padding: '12px 16px', textAlign: 'left', fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 600, color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                    {c.name}
                   </th>
                 ))}
               </tr>
@@ -148,24 +147,24 @@ export function PriceMatrix() {
                       {companyById.get(product.companyId)?.name} · {categoryById.get(product.categoryId)?.name}
                     </div>
                   </td>
-                  {activeTiers.map(tier => {
-                    const key = cellKey(product.id, tier.id);
+                  {activeCities.map(city => {
+                    const key = cellKey(product.id, city.id);
                     const isPending = key in pending;
                     const isSelected = selected.has(key);
-                    const value = getValue(product.id, tier.id);
+                    const value = getValue(product.id, city.id);
                     return (
-                      <td key={tier.id}
+                      <td key={city.id}
                         style={{
                           padding: '6px 8px', borderBottom: '1px solid var(--color-border)',
                           backgroundColor: isSelected ? 'rgba(124,58,237,0.08)' : isPending ? 'rgba(245,158,11,0.08)' : 'transparent',
                         }}
-                        onClick={e => { if (e.metaKey || e.ctrlKey) toggleSelect(product.id, tier.id); }}
+                        onClick={e => { if (e.metaKey || e.ctrlKey) toggleSelect(product.id, city.id); }}
                       >
                         <input
                           type="number" min={0} step="0.01"
                           value={value ?? ''}
                           placeholder="—"
-                          onChange={e => setPendingValue(product.id, tier.id, e.target.value === '' ? null : Number(e.target.value))}
+                          onChange={e => setPendingValue(product.id, city.id, e.target.value === '' ? null : Number(e.target.value))}
                           style={{
                             ...inputStyle, padding: '7px 8px', width: 130,
                             borderColor: isPending ? '#F59E0B' : 'var(--color-border)',

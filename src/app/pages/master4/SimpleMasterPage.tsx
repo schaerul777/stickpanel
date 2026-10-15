@@ -16,7 +16,7 @@ import {
   type SimpleTextRecord,
 } from '../../core/masterStore';
 
-type SimpleCollectionKey = 'cities' | 'brands' | 'termMoments' | 'termDues' | 'priceTiers';
+type SimpleCollectionKey = 'cities' | 'brands' | 'banks';
 
 interface SimpleMasterPageProps {
   core: CoreId;

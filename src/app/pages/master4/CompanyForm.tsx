@@ -31,36 +31,34 @@ export function CompanyForm() {
   const { toasts, showToast, dismiss } = useToast();
 
   const [name, setName] = useState(existing?.name ?? '');
-  const [abbr, setAbbr] = useState(existing?.abbr ?? '');
-  const [increment, setIncrement] = useState(existing?.increment ?? 0);
+  const [quotationPrefix, setQuotationPrefix] = useState(existing?.quotationPrefix ?? '');
   const [logo, setLogo] = useState<string | null>(existing?.logo ?? null);
+  const [legalImage, setLegalImage] = useState<string | null>(existing?.legalImage ?? null);
   const [address, setAddress] = useState(existing?.address ?? '');
   const [url, setUrl] = useState(existing?.url ?? '');
   const [phone, setPhone] = useState(existing?.phone ?? '');
-  const [notes, setNotes] = useState(existing?.notes ?? '');
   const [customerData, setCustomerData] = useState(existing?.customerData ?? '');
   const [cancellationPolicy, setCancellationPolicy] = useState(existing?.cancellationPolicy ?? '');
   const [termsAndConditions, setTermsAndConditions] = useState(existing?.termsAndConditions ?? '');
-  const [paymentTo, setPaymentTo] = useState(existing?.paymentTo ?? '');
+  const [paymentCs, setPaymentCs] = useState(existing?.paymentCs ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const handleAbbrChange = (v: string) => setAbbr(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
+  const handlePrefixChange = (v: string) => setQuotationPrefix(v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10));
 
   const handleSave = () => {
     const e: Record<string, string> = {};
     const trimmedName = name.trim();
     if (!trimmedName) e.name = 'Name is required';
     else if (isCompanyNameTaken(trimmedName, existing?.id)) e.name = 'This name already exists';
-    if (!abbr.trim()) e.abbr = 'Abbreviation is required';
-    if (increment < 0) e.increment = 'Increment must be 0 or more';
+    if (!quotationPrefix.trim()) e.quotationPrefix = 'Quotation prefix is required';
     if (Object.keys(e).length) { setErrors(e); return; }
 
     setSaving(true);
     setTimeout(() => {
       upsertCompany({
-        name: trimmedName, abbr, increment, logo, address, url, phone,
-        notes, customerData, cancellationPolicy, termsAndConditions, paymentTo,
+        name: trimmedName, quotationPrefix, logo, legalImage, address, url, phone,
+        customerData, cancellationPolicy, termsAndConditions, paymentCs,
       }, existing?.id);
       setSaving(false);
       showToast('success', existing ? 'Company updated' : 'Company added', existing ? 'Changes have been saved.' : 'New company has been added.');
@@ -101,20 +99,14 @@ export function CompanyForm() {
               {errors.name && <div style={errorTextStyle}>{errors.name}</div>}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Abbr <span style={{ color: '#EF4444' }}>*</span></label>
-                <input value={abbr} maxLength={10} onChange={e => { handleAbbrChange(e.target.value); if (errors.abbr) setErrors(x => ({ ...x, abbr: '' })); }} style={{ ...inputStyle, fontFamily: 'monospace', borderColor: errors.abbr ? '#EF4444' : 'var(--color-border)' }} />
-                {errors.abbr ? <div style={errorTextStyle}>{errors.abbr}</div> : <div style={helperStyle}>Max 10 characters, auto-uppercased</div>}
-              </div>
-              <div>
-                <label style={labelStyle}>Increment</label>
-                <input type="number" min={0} value={increment} onChange={e => { setIncrement(Number(e.target.value)); if (errors.increment) setErrors(x => ({ ...x, increment: '' })); }} style={{ ...inputStyle, borderColor: errors.increment ? '#EF4444' : 'var(--color-border)' }} />
-                {errors.increment ? <div style={errorTextStyle}>{errors.increment}</div> : <div style={helperStyle}>Running counter used for quotation numbering</div>}
-              </div>
+            <div>
+              <label style={labelStyle}>Quotation Prefix <span style={{ color: '#EF4444' }}>*</span></label>
+              <input value={quotationPrefix} maxLength={10} onChange={e => { handlePrefixChange(e.target.value); if (errors.quotationPrefix) setErrors(x => ({ ...x, quotationPrefix: '' })); }} style={{ ...inputStyle, fontFamily: 'monospace', borderColor: errors.quotationPrefix ? '#EF4444' : 'var(--color-border)' }} />
+              {errors.quotationPrefix ? <div style={errorTextStyle}>{errors.quotationPrefix}</div> : <div style={helperStyle}>Max 10 characters, auto-uppercased. Used for quotation numbering.</div>}
             </div>
 
             <ImageUpload label="Logo" value={logo} onChange={setLogo} />
+            <ImageUpload label="Legal Image" value={legalImage} onChange={setLegalImage} />
 
             <div>
               <label style={labelStyle}>Address</label>
@@ -135,11 +127,6 @@ export function CompanyForm() {
 
           <CardSection title="Quotation PDF Content">
             <div>
-              <label style={labelStyle}>Notes</label>
-              <textarea value={notes} maxLength={MAX_TEXTAREA} onChange={e => setNotes(e.target.value)} style={textareaStyle} />
-              <CharCounter value={notes} max={MAX_TEXTAREA} />
-            </div>
-            <div>
               <label style={labelStyle}>Customer Data</label>
               <textarea value={customerData} maxLength={MAX_TEXTAREA} onChange={e => setCustomerData(e.target.value)} style={textareaStyle} />
               <CharCounter value={customerData} max={MAX_TEXTAREA} />
@@ -158,8 +145,8 @@ export function CompanyForm() {
 
           <CardSection title="Payment">
             <div>
-              <label style={labelStyle}>Payment To</label>
-              <textarea value={paymentTo} onChange={e => setPaymentTo(e.target.value)} style={textareaStyle} />
+              <label style={labelStyle}>Payment CS</label>
+              <textarea value={paymentCs} onChange={e => setPaymentCs(e.target.value)} style={textareaStyle} />
               <div style={helperStyle}>Bank/account details printed on the quotation</div>
             </div>
           </CardSection>
@@ -179,7 +166,7 @@ export function CompanyForm() {
                   {name || 'Company Name'}
                 </div>
                 <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)' }}>
-                  {abbr || 'ABBR'}
+                  {quotationPrefix || 'PREFIX'}
                 </div>
               </div>
             </div>

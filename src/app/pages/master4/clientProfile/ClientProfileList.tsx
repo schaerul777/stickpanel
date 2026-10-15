@@ -26,7 +26,7 @@ const iconBtn = {
 export function ClientProfileList() {
   const navigate = useNavigate();
   const location = useLocation();
-  useClientProfileData(); // subscribe for re-render on any client-profile change
+  useClientProfileData();
   const masterData = useMasterData();
   const { activeCompanyId } = useClientProfileUI();
   const { toasts, showToast, dismiss } = useToast();
@@ -47,22 +47,19 @@ export function ClientProfileList() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [verifiedFilter, setVerifiedFilter] = useState<'all' | 'verified' | 'not-verified'>('all');
   const [cityFilter, setCityFilter] = useState('all');
-  const [industryFilter, setIndustryFilter] = useState('all');
   const [salesFilter, setSalesFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<ClientRecord | null>(null);
 
   const cityName = (id: string) => masterData.cities.find(c => c.id === id)?.name ?? '—';
-  const industryName = (id: string) => masterData.industries.find(c => c.id === id)?.name ?? '—';
 
   const rows = useMemo(() => {
     if (!activeCompanyId) return [];
     const q = search.trim().toLowerCase();
     return getClientsForCompany(activeCompanyId)
       .filter(c => showDeleted ? true : c.deletedAt === null)
-      .filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.taxNumber.toLowerCase().includes(q))
+      .filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
       .filter(c => cityFilter === 'all' || c.cityId === cityFilter)
-      .filter(c => industryFilter === 'all' || c.industryId === industryFilter)
       .filter(c => {
         const link = getLink(c.id, activeCompanyId);
         if (salesFilter !== 'all' && link?.salesId !== salesFilter) return false;
@@ -71,7 +68,7 @@ export function ClientProfileList() {
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeCompanyId, search, showDeleted, cityFilter, industryFilter, salesFilter, verifiedFilter]);
+  }, [activeCompanyId, search, showDeleted, cityFilter, salesFilter, verifiedFilter]);
 
   const total = rows.length;
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -80,7 +77,7 @@ export function ClientProfileList() {
     { key: 'name', label: 'Name', render: r => <span style={{ fontWeight: 500 }}>{r.name}</span> },
     { key: 'brand', label: 'Brand', render: r => r.brandText || <span style={{ color: 'var(--color-muted-foreground)' }}>—</span> },
     { key: 'city', label: 'City', render: r => cityName(r.cityId) },
-    { key: 'industry', label: 'Industry', render: r => industryName(r.industryId) },
+    { key: 'phone', label: 'Phone', render: r => r.phoneNumber || <span style={{ color: 'var(--color-muted-foreground)' }}>—</span> },
     { key: 'sales', label: 'Sales', render: r => {
       const link = getLink(r.id, activeCompanyId);
       return adminUsers.find(u => u.id === link?.salesId)?.name ?? '—';
@@ -122,7 +119,7 @@ export function ClientProfileList() {
       <Toolbar
         search={search}
         onSearchChange={v => { setSearch(v); setPage(1); }}
-        searchPlaceholder="Search name, email, or tax number…"
+        searchPlaceholder="Search name or email…"
         showDeleted={showDeleted}
         onToggleShowDeleted={v => { setShowDeleted(v); setPage(1); }}
         filters={
@@ -135,10 +132,6 @@ export function ClientProfileList() {
             <select value={cityFilter} onChange={e => { setCityFilter(e.target.value); setPage(1); }} style={{ ...selectStyle, width: 'auto' }}>
               <option value="all">City: All</option>
               {masterData.cities.filter(c => !c.deletedAt).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <select value={industryFilter} onChange={e => { setIndustryFilter(e.target.value); setPage(1); }} style={{ ...selectStyle, width: 'auto' }}>
-              <option value="all">Industry: All</option>
-              {masterData.industries.filter(c => !c.deletedAt).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <select value={salesFilter} onChange={e => { setSalesFilter(e.target.value); setPage(1); }} style={{ ...selectStyle, width: 'auto' }}>
               <option value="all">Sales: All</option>

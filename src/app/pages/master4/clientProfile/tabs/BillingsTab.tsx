@@ -3,7 +3,7 @@ import { Plus, Star, Pencil, Trash2, ShieldAlert, Receipt } from 'lucide-react';
 import { MasterTable, type MasterColumn } from '../../../../components/master/MasterTable';
 import { FormDrawer } from '../../../../components/master/FormDrawer';
 import { ConfirmDialog } from '../../../../components/master/ConfirmDialog';
-import { FileUpload } from '../../../../components/master/FileUpload';
+import { ImageUpload } from '../../../../components/master/ImageUpload';
 import { EmptyState } from '../../../../components/EmptyState';
 import { inputStyle, labelStyle, errorTextStyle, primaryButtonStyle } from '../../../../components/master/styles';
 import { Switch } from '../../../../components/master/Switch';
@@ -97,19 +97,16 @@ export function BillingsTab({ client, showToast }: TabProps) {
 function BillingDrawer({ clientId, record, onClose, onSaved }: {
   clientId: string; record: ClientBilling | null; onClose: () => void; onSaved: (isNew: boolean) => void;
 }) {
+  const [key, setKey] = useState(record?.key ?? '');
   const [name, setName] = useState(record?.name ?? '');
   const [email, setEmail] = useState(record?.email ?? '');
   const [phoneNumber, setPhoneNumber] = useState(record?.phoneNumber ?? '');
-  const [mobileNumber, setMobileNumber] = useState(record?.mobileNumber ?? '');
   const [faxNumber, setFaxNumber] = useState(record?.faxNumber ?? '');
   const [billingAddress, setBillingAddress] = useState(record?.billingAddress ?? '');
   const [shippingAddress, setShippingAddress] = useState(record?.shippingAddress ?? '');
   const [primary, setPrimary] = useState(record?.primary ?? false);
-  const [npwp, setNpwp] = useState(record?.npwp ?? '');
-  const [ktp, setKtp] = useState(record?.ktp ?? '');
-  const [npwpImage, setNpwpImage] = useState<string | null>(record?.npwpImage ?? null);
-  const [ktpImage, setKtpImage] = useState<string | null>(record?.ktpImage ?? null);
-  const [extraNotes, setExtraNotes] = useState(record?.extraNotes ?? '');
+  const [copyImage, setCopyImage] = useState<string | null>(record?.copyImage ?? null);
+  const [extra, setExtra] = useState(record?.extra ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -121,8 +118,8 @@ function BillingDrawer({ clientId, record, onClose, onSaved }: {
     if (Object.keys(e).length) { setErrors(e); return; }
 
     const data: BillingFormInput = {
-      name: name.trim(), email: email.trim(), phoneNumber, mobileNumber, faxNumber,
-      billingAddress: billingAddress.trim(), shippingAddress, primary, npwp, ktp, npwpImage, ktpImage, extraNotes,
+      key: key.trim(), name: name.trim(), email: email.trim(), phoneNumber, faxNumber,
+      billingAddress: billingAddress.trim(), shippingAddress, primary, copyImage, extra,
     };
     setSaving(true);
     setTimeout(() => { upsertBilling(clientId, data, record?.id); setSaving(false); onSaved(!record); }, 300);
@@ -130,6 +127,10 @@ function BillingDrawer({ clientId, record, onClose, onSaved }: {
 
   return (
     <FormDrawer title={record ? 'Edit Billing' : 'Add Billing'} onClose={onClose} onSave={handleSave} saving={saving}>
+      <div>
+        <label style={labelStyle}>Key</label>
+        <input value={key} onChange={e => setKey(e.target.value)} style={inputStyle} />
+      </div>
       <div>
         <label style={labelStyle}>Name <span style={{ color: '#EF4444' }}>*</span></label>
         <input value={name} onChange={e => { setName(e.target.value); if (errors.name) setErrors(x => ({ ...x, name: '' })); }} style={{ ...inputStyle, borderColor: errors.name ? '#EF4444' : 'var(--color-border)' }} />
@@ -142,9 +143,8 @@ function BillingDrawer({ clientId, record, onClose, onSaved }: {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div><label style={labelStyle}>Phone Number</label><input value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} style={inputStyle} /></div>
-        <div><label style={labelStyle}>Mobile Number</label><input value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} style={inputStyle} /></div>
+        <div><label style={labelStyle}>Fax Number</label><input value={faxNumber} onChange={e => setFaxNumber(e.target.value)} style={inputStyle} /></div>
       </div>
-      <div><label style={labelStyle}>Fax Number</label><input value={faxNumber} onChange={e => setFaxNumber(e.target.value)} style={inputStyle} /></div>
       <div>
         <label style={labelStyle}>Billing Address <span style={{ color: '#EF4444' }}>*</span></label>
         <textarea value={billingAddress} onChange={e => { setBillingAddress(e.target.value); if (errors.billingAddress) setErrors(x => ({ ...x, billingAddress: '' })); }} style={{ ...textareaStyle, borderColor: errors.billingAddress ? '#EF4444' : 'var(--color-border)' }} />
@@ -152,13 +152,8 @@ function BillingDrawer({ clientId, record, onClose, onSaved }: {
       </div>
       <div><label style={labelStyle}>Shipping Address</label><textarea value={shippingAddress} onChange={e => setShippingAddress(e.target.value)} style={textareaStyle} /></div>
       <Switch checked={primary} onChange={setPrimary} label="Primary" helperText="Turning this on unsets any other primary billing for this client." />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div><label style={labelStyle}>NPWP</label><input value={npwp} onChange={e => setNpwp(e.target.value)} style={inputStyle} /></div>
-        <div><label style={labelStyle}>KTP</label><input value={ktp} onChange={e => setKtp(e.target.value)} style={inputStyle} /></div>
-      </div>
-      <FileUpload label="NPWP Image" value={npwpImage} onChange={(v) => setNpwpImage(v)} />
-      <FileUpload label="KTP Image" value={ktpImage} onChange={(v) => setKtpImage(v)} />
-      <div><label style={labelStyle}>Extra Notes</label><textarea value={extraNotes} onChange={e => setExtraNotes(e.target.value)} style={textareaStyle} /></div>
+      <ImageUpload label="Copy Image" value={copyImage} onChange={(v) => setCopyImage(v)} />
+      <div><label style={labelStyle}>Extra</label><textarea value={extra} onChange={e => setExtra(e.target.value)} style={textareaStyle} /></div>
     </FormDrawer>
   );
 }

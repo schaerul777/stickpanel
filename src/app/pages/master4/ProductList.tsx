@@ -10,8 +10,8 @@ import { Switch } from '../../components/master/Switch';
 import { selectStyle, primaryButtonStyle } from '../../components/master/styles';
 import { useToast, ToastContainer } from '../../components/Toast';
 import {
-  useMasterData, formatDate, formatIDR,
-  softDeleteProduct, restoreProduct, setProductActive,
+  useMasterData, formatDate,
+  softDeleteProduct, restoreProduct, setProductAvailable,
   type ProductRecord,
 } from '../../core/masterStore';
 
@@ -29,7 +29,7 @@ export function ProductList() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [companyFilter, setCompanyFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [availableFilter, setAvailableFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<ProductRecord | null>(null);
 
@@ -43,19 +43,12 @@ export function ProductList() {
       .filter(r => !q || r.name.toLowerCase().includes(q))
       .filter(r => companyFilter === 'all' ? true : r.companyId === companyFilter)
       .filter(r => categoryFilter === 'all' ? true : r.categoryId === categoryFilter)
-      .filter(r => activeFilter === 'all' ? true : (activeFilter === 'active' ? r.active : !r.active))
+      .filter(r => availableFilter === 'all' ? true : (availableFilter === 'available' ? r.isAvailable : !r.isAvailable))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [data.products, search, showDeleted, companyFilter, categoryFilter, activeFilter]);
+  }, [data.products, search, showDeleted, companyFilter, categoryFilter, availableFilter]);
 
   const total = filtered.length;
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const priceSummary = (r: ProductRecord) => {
-    if (r.prices.length === 0) return '—';
-    const values = r.prices.map(p => p.price);
-    const min = Math.min(...values), max = Math.max(...values);
-    return `${r.prices.length} tier${r.prices.length === 1 ? '' : 's'} · ${formatIDR(min)}${min !== max ? ` – ${formatIDR(max)}` : ''}`;
-  };
 
   const columns: MasterColumn<ProductRecord>[] = [
     { key: 'image', label: 'Image', width: '56px', render: r => (
@@ -66,11 +59,10 @@ export function ProductList() {
     { key: 'name', label: 'Name', sortable: true, render: r => <span style={{ fontWeight: 500 }}>{r.name}</span> },
     { key: 'company', label: 'Company', render: r => companyById.get(r.companyId)?.name ?? '—' },
     { key: 'category', label: 'Category', render: r => categoryById.get(r.categoryId)?.name ?? '—' },
-    { key: 'quantityUnit', label: 'Quantity Unit', render: r => r.quantityUnit },
-    { key: 'durationUnit', label: 'Duration Unit', render: r => r.durationUnit },
-    { key: 'prices', label: 'Prices', render: r => <span style={{ fontSize: '13px' }}>{priceSummary(r)}</span> },
-    { key: 'active', label: 'Active', render: r => (
-      <Switch checked={r.active} onChange={v => { setProductActive(r.id, v); showToast('success', v ? 'Product activated' : 'Product deactivated', `"${r.name}" is now ${v ? 'active' : 'inactive'}.`); }} />
+    { key: 'quoteSuffix', label: 'Quote Suffix', render: r => <span style={{ fontFamily: 'monospace' }}>{r.quoteSuffix || '—'}</span> },
+    { key: 'availableQty', label: 'Available Qty', render: r => r.availableQty },
+    { key: 'isAvailable', label: 'Available', render: r => (
+      <Switch checked={r.isAvailable} onChange={v => { setProductAvailable(r.id, v); showToast('success', v ? 'Product available' : 'Product unavailable', `"${r.name}" is now ${v ? 'available' : 'unavailable'}.`); }} />
     ) },
     { key: 'updatedAt', label: 'Updated at', render: r => <span style={{ color: 'var(--color-muted-foreground)' }}>{formatDate(r.updatedAt)}</span> },
     { key: 'actions', label: 'Actions', render: r => (
@@ -90,7 +82,7 @@ export function ProductList() {
         core="core-4"
         trail={['Master', 'Product']}
         title="Product"
-        subtitle="Manage sellable products and their price tiers"
+        subtitle="Manage sellable products"
         actions={<button style={primaryButtonStyle} onClick={() => navigate('/core-4/master/product/new')}><Plus size={15} /> Add Product</button>}
       />
 
@@ -110,10 +102,10 @@ export function ProductList() {
               <option value="all">Category: All</option>
               {data.productCategories.filter(c => !c.deletedAt).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <select value={activeFilter} onChange={e => { setActiveFilter(e.target.value as any); setPage(1); }} style={{ ...selectStyle, width: 'auto' }}>
-              <option value="all">Active: All</option>
-              <option value="active">Active: Yes</option>
-              <option value="inactive">Active: No</option>
+            <select value={availableFilter} onChange={e => { setAvailableFilter(e.target.value as any); setPage(1); }} style={{ ...selectStyle, width: 'auto' }}>
+              <option value="all">Available: All</option>
+              <option value="available">Available: Yes</option>
+              <option value="unavailable">Available: No</option>
             </select>
           </>
         }

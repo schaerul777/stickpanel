@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import {
   Plus, Download, Search, FileText, X,
   Send, Edit, Trash2, CheckCircle, Check,
-  ChevronLeft, ChevronRight, AlertCircle, Clock,
+  ChevronLeft, ChevronRight, Clock,
   AlertTriangle, DollarSign, Eye, Copy,
   MoreVertical, Columns3, ChevronDown,
   ChevronsUpDown, ArrowUp, ArrowDown,
@@ -20,11 +20,13 @@ import { Checkbox } from '../components/Checkbox';
 import { QuotationDetailDrawer } from '../components/QuotationDetailDrawer';
 import { CreateEditQuotationModal } from '../components/CreateEditQuotationModal';
 import { useToast, ToastContainer } from '../components/Toast';
+import { ActiveCompanyBar } from '../components/master/ActiveCompanyBar';
+import { useClientProfileUI } from '../core/clientProfileUI';
 
 // ── Column definitions ─────────────────────────────────────────────────────────
 
 const ALL_COLS = [
-  { key: 'quoNo',       label: 'Quotation No.'  },
+  { key: 'quotationNumber', label: 'Quotation No.'  },
   { key: 'nameClient',  label: 'Quotation Name' },
   { key: 'sales',       label: 'Sales Person'   },
   { key: 'status',      label: 'Status'         },
@@ -37,7 +39,7 @@ const ALL_COLS = [
 ] as const;
 type ColKey = typeof ALL_COLS[number]['key'];
 
-const DEFAULT_COLS = new Set<ColKey>(['quoNo', 'nameClient', 'sales', 'status', 'created', 'convertedAt']);
+const DEFAULT_COLS = new Set<ColKey>(['quotationNumber', 'nameClient', 'sales', 'status', 'created', 'convertedAt']);
 
 // Frozen column widths (px) – used to compute sticky left offsets
 const W_CHECKBOX = 52;
@@ -48,12 +50,11 @@ const W_NAME     = 240;
 // ── Status tab config ──────────────────────────────────────────────────────────
 
 const STATUS_TABS: { key: QuotationStatus | 'all'; label: string }[] = [
-  { key: 'all',     label: 'All'     },
-  { key: 'lead',    label: 'Leads'   },
-  { key: 'won',     label: 'Won'     },
-  { key: 'lost',    label: 'Lost'    },
-  { key: 'expired', label: 'Expired' },
-  { key: 'draft',   label: 'Draft'   },
+  { key: 'all',        label: 'All'         },
+  { key: 'lead',       label: 'Leads'       },
+  { key: 'filled',     label: 'Filled'      },
+  { key: 'signed',     label: 'Signed'      },
+  { key: 'salesOrder', label: 'Sales Order' },
 ];
 
 // ── Portal menu hook ───────────────────────────────────────────────────────────
@@ -118,9 +119,7 @@ function QStatusBadge({ status }: { status: QuotationStatus }) {
       padding: '3px 9px', borderRadius: 'var(--radius-sm)',
       backgroundColor: s.bg, border: s.border || 'none', whiteSpace: 'nowrap',
     }}>
-      {status !== 'draft' && (
-        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: s.color, flexShrink: 0 }} />
-      )}
+      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: s.color, flexShrink: 0 }} />
       <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 600, color: s.color }}>
         {s.label}
       </span>
@@ -363,7 +362,7 @@ function MultiSelect({
 
 // ── Sortable TH ────────────────────────────────────────────────────────────────
 
-type SortColKey = 'quoNo' | 'grandTotal' | 'createdDate' | 'validUntil';
+type SortColKey = 'quotationNumber' | 'grandTotal' | 'createdDate' | 'validUntil';
 
 function SortableTh({ children, colKey, sortCol, sortDir, onSort, style }: {
   children: React.ReactNode;
@@ -391,30 +390,35 @@ function SortableTh({ children, colKey, sortCol, sortDir, onSort, style }: {
 
 // ── Row Action Menu (portal) ───────────────────────────────────────────────────
 
-function RowActionMenu({ quo, onView, onEdit, onSend, onConvert, onMarkLost, onDuplicate, onDelete }: {
+function RowActionMenu({ quo, onView, onEdit, onSend, onConvert, onSign, onDuplicate, onDelete }: {
   quo: Quotation;
   onView: () => void;
   onEdit: () => void;
   onSend: () => void;
   onConvert: () => void;
-  onMarkLost: () => void;
+  onSign: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const { open, setOpen, pos, btnRef, menuRef, toggle } = usePortalMenu();
 
+  const canEdit = quo.status === 'lead' || quo.status === 'filled';
   const items = [
     { label: 'View Details',              icon: Eye,          action: onView,      danger: false },
-    { label: 'Edit',                      icon: Edit,         action: onEdit,      danger: false },
+    ...(canEdit
+      ? [{ label: 'Edit',                icon: Edit,         action: onEdit,      danger: false }]
+      : []),
     { label: 'Duplicate',                 icon: Copy,         action: onDuplicate, danger: false },
     { label: 'Send to Client',            icon: Send,         action: onSend,      danger: false },
+    ...(quo.status === 'filled'
+      ? [{ label: 'Sign Quotation',      icon: CheckCircle,  action: onSign,      danger: false }]
+      : []),
+    ...(quo.status === 'signed'
+      ? [{ label: 'Convert to Sales Order', icon: CheckCircle, action: onConvert, danger: false }]
+      : []),
     ...(quo.status === 'lead'
-      ? [{ label: 'Convert to Sales Order', icon: CheckCircle, action: onConvert,  danger: false }]
+      ? [{ label: 'Delete',              icon: Trash2,       action: onDelete,    danger: true  }]
       : []),
-    ...(quo.status === 'lead' || quo.status === 'draft'
-      ? [{ label: 'Mark as Lost',           icon: AlertCircle, action: onMarkLost, danger: false }]
-      : []),
-    { label: 'Delete',                    icon: Trash2,       action: onDelete,    danger: true  },
   ];
 
   return (
@@ -488,69 +492,46 @@ function RowActionMenu({ quo, onView, onEdit, onSend, onConvert, onMarkLost, onD
   );
 }
 
-// ── Mark as Lost Modal ─────────────────────────────────────────────────────────
+// ── Sign Quotation Modal ───────────────────────────────────────────────────────
 
-const LOST_REASONS = [
-  'Price too high', 'Went with competitor', 'Client budget constraints',
-  'Timing not right', 'Client unresponsive', 'Client cancelled project', 'Other',
-];
-
-function MarkLostModal({ quo, onConfirm, onClose }: {
+function SignQuotationModal({ quo, onConfirm, onClose }: {
   quo: Quotation;
-  onConfirm: (id: string, reason: string, notes: string) => void;
+  onConfirm: (id: string) => void;
   onClose: () => void;
 }) {
-  const [reason, setReason] = useState('');
-  const [notes,  setNotes]  = useState('');
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)' }} />
       <div style={{ position: 'relative', width: 480, backgroundColor: 'var(--color-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-16)', fontWeight: 700, color: 'var(--color-foreground)' }}>Mark Quotation as Lost</div>
-            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', marginTop: 2 }}>{quo.quoNo}</div>
-          </div>
+          <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-16)', fontWeight: 700, color: 'var(--color-foreground)' }}>Sign Quotation</div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-muted-foreground)' }}>
             <X size={14} />
           </button>
         </div>
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: 'var(--color-foreground)', display: 'block', marginBottom: 6 }}>
-              Reason <span style={{ color: '#EF4444' }}>*</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={reason}
-                onChange={e => setReason(e.target.value)}
-                style={{ width: '100%', padding: '9px 36px 9px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-input-background)', color: 'var(--color-foreground)', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', outline: 'none', appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
-              >
-                <option value="">Select a reason...</option>
-                {LOST_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-muted-foreground)', pointerEvents: 'none' }} />
+        <div style={{ padding: '20px 24px' }}>
+          <div style={{ padding: '12px 14px', borderRadius: 'var(--radius)', backgroundColor: 'rgba(124,58,237,0.07)', border: '1px solid rgba(124,58,237,0.2)', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: '#7C3AED', marginBottom: 4 }}>Signing {quo.quotationNumber}</div>
+            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span>Client: {quo.clientName}</span>
+              <span>Grand Total: {formatIDR(quo.grandTotal)}</span>
+              <span>Products: {quo.products.length} item{quo.products.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
-          <div>
-            <label style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: 'var(--color-foreground)', display: 'block', marginBottom: 6 }}>Additional Notes</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Provide more details about why this opportunity was lost..."
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-input-background)', color: 'var(--color-foreground)', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
-            />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <AlertTriangle size={14} style={{ color: '#F59E0B', flexShrink: 0, marginTop: 2 }} />
+            <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', lineHeight: 1.5 }}>
+              This action will mark the quotation as <strong>Signed</strong>. Signed quotations can no longer be edited. You can then convert it to a Sales Order.
+            </span>
           </div>
         </div>
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-secondary)', color: 'var(--color-foreground)', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
           <button
-            onClick={() => { if (!reason) return; onConfirm(quo.id, reason, notes); }}
-            disabled={!reason}
-            style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: reason ? '#EF4444' : 'rgba(239,68,68,0.3)', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, cursor: reason ? 'pointer' : 'not-allowed' }}
+            onClick={() => onConfirm(quo.id)}
+            style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#7C3AED', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            Mark as Lost
+            <Check size={14} /> Sign Quotation
           </button>
         </div>
       </div>
@@ -566,7 +547,7 @@ function ConvertSOModal({ quo, onConfirm, onClose }: {
   onClose: () => void;
 }) {
   const [notifyClient, setNotifyClient] = useState(true);
-  const soNumber = quo.quoNo.replace('QUO', 'SO');
+  const soNumber = quo.quotationNumber.replace('QUO', 'SO');
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)' }} />
@@ -579,7 +560,7 @@ function ConvertSOModal({ quo, onConfirm, onClose }: {
         </div>
         <div style={{ padding: '20px 24px' }}>
           <div style={{ padding: '12px 14px', borderRadius: 'var(--radius)', backgroundColor: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)', marginBottom: 16 }}>
-            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: '#10B981', marginBottom: 4 }}>Converting {quo.quoNo}</div>
+            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: '#10B981', marginBottom: 4 }}>Converting {quo.quotationNumber}</div>
             <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: 'var(--color-muted-foreground)', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span>Client: {quo.clientName}</span>
               <span>Grand Total: {formatIDR(quo.grandTotal)}</span>
@@ -612,7 +593,7 @@ function ConvertSOModal({ quo, onConfirm, onClose }: {
 // ── Send to Client Modal ───────────────────────────────────────────────────────
 
 function SendClientModal({ quo, onClose }: { quo: Quotation; onClose: () => void }) {
-  const [subject, setSubject] = useState(`Quotation ${quo.quoNo} - ${quo.quoteName}`);
+  const [subject, setSubject] = useState(`Quotation ${quo.quotationNumber} - ${quo.quoteName}`);
   const [email,   setEmail]   = useState(quo.contactEmail);
   const [sent,    setSent]    = useState(false);
 
@@ -663,7 +644,7 @@ function SendClientModal({ quo, onClose }: { quo: Quotation; onClose: () => void
             <label style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, color: 'var(--color-foreground)', display: 'block', marginBottom: 6 }}>Attachment</label>
             <div style={{ padding: '10px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <FileText size={14} style={{ color: 'var(--color-muted-foreground)' }} />
-              <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', color: 'var(--color-foreground)' }}>{quo.quoNo}.pdf</span>
+              <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', color: 'var(--color-foreground)' }}>{quo.quotationNumber}.pdf</span>
               <CheckCircle size={14} style={{ color: '#10B981', marginLeft: 'auto' }} />
             </div>
           </div>
@@ -698,12 +679,12 @@ function genQuoNo(count: number): string {
 export function Quotation() {
   const [quotations,     setQuotations]     = useState<Quotation[]>(INITIAL_QUOTATIONS);
   const { toasts, showToast, dismiss }      = useToast();
+  const { activeCompanyId }                 = useClientProfileUI();
   const [search,         setSearch]         = useState('');
   const [activeTab,      setActiveTab]      = useState<QuotationStatus | 'all'>('all');
   const [filterOpen,     setFilterOpen]     = useState(false);
   // Multi-select filter state
   const [filterSales,    setFilterSales]    = useState<string[]>([]);
-  const [filterCompany,  setFilterCompany]  = useState<string[]>([]);
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo,   setFilterDateTo]   = useState('');
   const [sortCol,        setSortCol]        = useState<SortColKey | null>(null);
@@ -716,7 +697,7 @@ export function Quotation() {
   const [detailQuo,      setDetailQuo]      = useState<Quotation | null>(null);
   const [showCreate,     setShowCreate]     = useState(false);
   const [editQuo,        setEditQuo]        = useState<Quotation | null>(null);
-  const [lostQuo,        setLostQuo]        = useState<Quotation | null>(null);
+  const [signQuo,        setSignQuo]        = useState<Quotation | null>(null);
   const [convertQuo,     setConvertQuo]     = useState<Quotation | null>(null);
   const [sendQuo,        setSendQuo]        = useState<Quotation | null>(null);
   const [rppOpen,        setRppOpen]        = useState(false);
@@ -730,40 +711,43 @@ export function Quotation() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  // ── Company-scoped quotations (used for stats + tab counts) ──
+  const companyQuotations = useMemo(() =>
+    activeCompanyId ? quotations.filter(q => q.masCompany_id === activeCompanyId) : quotations,
+  [quotations, activeCompanyId]);
+
   // ── Stats ──
   const stats = useMemo(() => {
-    const leads    = quotations.filter(q => q.status === 'lead');
-    const won      = quotations.filter(q => q.status === 'won');
-    const lostExp  = quotations.filter(q => q.status === 'lost' || q.status === 'expired');
-    const totalVal = [...leads, ...won].reduce((s, q) => s + q.grandTotal, 0);
-    return { total: quotations.length, leads: leads.length, won: won.length, lostExp: lostExp.length, totalVal };
-  }, [quotations]);
+    const leads      = companyQuotations.filter(q => q.status === 'lead');
+    const filled     = companyQuotations.filter(q => q.status === 'filled');
+    const signed     = companyQuotations.filter(q => q.status === 'signed');
+    const salesOrder = companyQuotations.filter(q => q.status === 'salesOrder');
+    const totalVal   = companyQuotations.reduce((s, q) => s + q.grandTotal, 0);
+    return { total: companyQuotations.length, leads: leads.length, filled: filled.length, signed: signed.length, salesOrder: salesOrder.length, totalVal };
+  }, [companyQuotations]);
 
   // ── Tab counts ──
   const tabCounts = useMemo(() => {
-    const c: Record<string, number> = { all: quotations.length };
-    quotations.forEach(q => { c[q.status] = (c[q.status] || 0) + 1; });
+    const c: Record<string, number> = { all: companyQuotations.length };
+    companyQuotations.forEach(q => { c[q.status] = (c[q.status] || 0) + 1; });
     return c;
-  }, [quotations]);
+  }, [companyQuotations]);
 
   // ── Filter option lists ──
   const salesOptions = useMemo(
     () => SALES_PERSONS_LIST.map(s => ({ value: s.id, label: s.name })),
     []
   );
-  const companyOptions = useMemo(() => {
-    const names = [...new Set(quotations.map(q => q.clientName))].sort();
-    return names.map(n => ({ value: n, label: n }));
-  }, [quotations]);
-
   // ── Filter + sort ──
   const filtered = useMemo(() => {
     let list = [...quotations];
+    // Company scope — only show quotations belonging to the active company
+    if (activeCompanyId) list = list.filter(q => q.masCompany_id === activeCompanyId);
     if (activeTab !== 'all') list = list.filter(q => q.status === activeTab);
     if (search) {
       const s = search.toLowerCase();
       list = list.filter(q =>
-        q.quoNo.toLowerCase().includes(s) ||
+        q.quotationNumber.toLowerCase().includes(s) ||
         q.clientName.toLowerCase().includes(s) ||
         q.quoteName.toLowerCase().includes(s) ||
         q.salesPerson.name.toLowerCase().includes(s) ||
@@ -771,7 +755,6 @@ export function Quotation() {
       );
     }
     if (filterSales.length > 0)   list = list.filter(q => filterSales.includes(q.salesPerson.id));
-    if (filterCompany.length > 0) list = list.filter(q => filterCompany.includes(q.clientName));
     if (filterDateFrom) {
       const from = new Date(filterDateFrom);
       list = list.filter(q => q.createdDateObj >= from);
@@ -784,7 +767,7 @@ export function Quotation() {
     if (sortCol) {
       list.sort((a, b) => {
         let va: number | string | Date, vb: number | string | Date;
-        if      (sortCol === 'quoNo')       { va = a.quoNo;          vb = b.quoNo; }
+        if      (sortCol === 'quotationNumber')       { va = a.quotationNumber; vb = b.quotationNumber; }
         else if (sortCol === 'grandTotal')  { va = a.grandTotal;     vb = b.grandTotal; }
         else if (sortCol === 'createdDate') { va = a.createdDateObj; vb = b.createdDateObj; }
         else                               { va = a.validUntilDate; vb = b.validUntilDate; }
@@ -794,7 +777,7 @@ export function Quotation() {
       });
     }
     return list;
-  }, [quotations, activeTab, search, filterSales, filterCompany, filterDateFrom, filterDateTo, sortCol, sortDir]);
+  }, [quotations, activeTab, search, filterSales, activeCompanyId, filterDateFrom, filterDateTo, sortCol, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const safePage   = Math.min(page, totalPages);
@@ -829,51 +812,52 @@ export function Quotation() {
   };
   const handleClearFilters = () => {
     setFilterSales([]);
-    setFilterCompany([]);
     setFilterDateFrom('');
     setFilterDateTo('');
     setPage(1);
   };
 
-  const handleMarkLost = (id: string, reason: string) => {
+  const handleSign = (id: string) => {
     const quo = quotations.find(q => q.id === id);
     setQuotations(p => p.map(q =>
-      q.id === id ? { ...q, status: 'lost' as QuotationStatus, lostReason: reason, convertedAt: 'Feb 20, 2026' } : q
+      q.id === id ? { ...q, status: 'signed' as QuotationStatus } : q
     ));
-    setLostQuo(null);
-    if (quo) showToast('warning', 'Quotation Marked Lost', `${quo.quoNo} has been marked as lost.`);
+    setSignQuo(null);
+    if (quo) showToast('success', 'Quotation Signed', `${quo.quotationNumber} has been signed.`);
   };
   const handleConvert = (id: string) => {
     const quo = quotations.find(q => q.id === id);
     setQuotations(p => p.map(q =>
-      q.id === id ? { ...q, status: 'won' as QuotationStatus, convertedAt: 'Feb 20, 2026' } : q
+      q.id === id ? { ...q, status: 'salesOrder' as QuotationStatus, convertedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } : q
     ));
     setConvertQuo(null);
-    if (quo) showToast('success', 'Converted to Sales Order', `${quo.quoNo} has been converted successfully.`);
+    if (quo) showToast('success', 'Converted to Sales Order', `${quo.quotationNumber} has been converted successfully.`);
   };
   const handleDuplicate = (quo: Quotation) => {
     const newNo = genQuoNo(quotations.length + 1);
     const n: Quotation = {
       ...quo,
-      id: newNo, quoNo: newNo,
-      status: 'draft', createdDate: 'Feb 20, 2026', createdDateObj: new Date('2026-02-20'),
+      id: newNo, quotationNumber: newNo, quotationNumberRev: 'A',
+      masCompany_id: '', setClientProfile_id: '', setClientContact_id: '', setClientBilling_id: '', masBrand_id: '',
+      image: null, appToDate: null, cancelledAt: null,
+      status: 'lead', createdDate: 'Feb 20, 2026', createdDateObj: new Date('2026-02-20'),
       convertedAt: undefined,
     };
     setQuotations(p => [n, ...p]);
-    showToast('success', 'Quotation Duplicated', `A draft copy of ${quo.quoNo} has been created as ${newNo}.`);
+    showToast('success', 'Quotation Duplicated', `A copy of ${quo.quotationNumber} has been created as ${newNo}.`);
   };
   const handleDelete = (id: string) => {
     const quo = quotations.find(q => q.id === id);
     if (window.confirm('Delete this quotation?')) {
       setQuotations(p => p.filter(q => q.id !== id));
       setSelectedIds(prev => { const ns = new Set(prev); ns.delete(id); return ns; });
-      if (quo) showToast('success', 'Quotation Deleted', `${quo.quoNo} has been deleted.`);
+      if (quo) showToast('success', 'Quotation Deleted', `${quo.quotationNumber} has been deleted.`);
     }
   };
   const handleExport = () => {
     const csv = [
       ['Quo No', 'Client', 'Quotation Name', 'Sales Person', 'Status', 'Grand Total', 'Created', 'Converted At'],
-      ...quotations.map(q => [q.quoNo, q.clientName, q.quoteName, q.salesPerson.name, q.status, formatIDR(q.grandTotal), q.createdDate, q.convertedAt || '']),
+      ...quotations.map(q => [q.quotationNumber, q.clientName, q.quoteName, q.salesPerson.name, q.status, formatIDR(q.grandTotal), q.createdDate, q.convertedAt || '']),
     ].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
     const a = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
@@ -888,7 +872,6 @@ export function Quotation() {
   }, 0);
   const activeFilters = [
     filterSales.length > 0,
-    filterCompany.length > 0,
     filterDateFrom !== '' || filterDateTo !== '',
   ].filter(Boolean).length;
 
@@ -943,13 +926,13 @@ export function Quotation() {
   // Always frozen: Checkbox (W_CHECKBOX) + Actions (W_ACTIONS)
   // Conditionally frozen: quoNo (if visible) + nameClient (if visible)
   let frozenLeft = W_CHECKBOX + W_ACTIONS; // starts after checkbox + actions
-  const quoNoLeft  = frozenLeft; if (visibleCols.has('quoNo'))      frozenLeft += W_QUONO;
+  const quoNoLeft  = frozenLeft; if (visibleCols.has('quotationNumber'))      frozenLeft += W_QUONO;
   const nameLeft   = frozenLeft; if (visibleCols.has('nameClient')) frozenLeft += W_NAME;
 
   // Which frozen column is the last one (gets the divider shadow)
   const lastFrozenKey =
     visibleCols.has('nameClient') ? 'nameClient' :
-    visibleCols.has('quoNo')      ? 'quoNo'      : 'actions';
+    visibleCols.has('quotationNumber')      ? 'quotationNumber'      : 'actions';
   const frozenDivider = '3px 0 8px rgba(0,0,0,0.07)';
 
   // Helper: bg for frozen td cells
@@ -998,14 +981,16 @@ export function Quotation() {
         </div>
       </div>
 
+      <ActiveCompanyBar />
+
       {/* ── Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 24 }}>
         {([
-          { label: 'Total Quotations',  value: String(stats.total),       sub: 'All time',                  color: '#7C3AED', bg: 'rgba(124,58,237,0.07)',  Icon: FileText    },
-          { label: 'Active Leads',      value: String(stats.leads),       sub: 'Pending client decision',   color: '#F59E0B', bg: 'rgba(245,158,11,0.07)',  Icon: Clock       },
-          { label: 'Won (Converted)',   value: String(stats.won),         sub: 'Converted to Sales Orders', color: '#10B981', bg: 'rgba(16,185,129,0.07)',  Icon: CheckCircle },
-          { label: 'Lost / Expired',    value: String(stats.lostExp),     sub: 'Expired or rejected',       color: '#EF4444', bg: 'rgba(239,68,68,0.07)',   Icon: AlertCircle },
-          { label: 'Total Quote Value', value: formatIDR(stats.totalVal), sub: 'Active leads + won',        color: '#10B981', bg: 'rgba(16,185,129,0.07)',  Icon: DollarSign  },
+          { label: 'Total Quotations',  value: String(stats.total),       sub: 'All time',                   color: '#7C3AED', bg: 'rgba(124,58,237,0.07)',  Icon: FileText    },
+          { label: 'Active Leads',      value: String(stats.leads),       sub: 'Pending completion',         color: '#F59E0B', bg: 'rgba(245,158,11,0.07)',  Icon: Clock       },
+          { label: 'Filled',            value: String(stats.filled),      sub: 'Ready to sign',              color: '#2563EB', bg: 'rgba(37,99,235,0.07)',   Icon: FileText    },
+          { label: 'Signed',            value: String(stats.signed),      sub: 'Awaiting conversion',        color: '#7C3AED', bg: 'rgba(124,58,237,0.07)',  Icon: CheckCircle },
+          { label: 'Total Quote Value', value: formatIDR(stats.totalVal), sub: 'All quotations',             color: '#10B981', bg: 'rgba(16,185,129,0.07)',  Icon: DollarSign  },
         ] as const).map(s => (
           <div key={s.label} style={{ backgroundColor: 'var(--color-card)', borderRadius: 'var(--radius-lg)', padding: '16px 18px', border: '1px solid var(--color-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1143,23 +1128,6 @@ export function Quotation() {
                 />
               </div>
 
-              {/* Company Name multi-select */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 180px', minWidth: 0 }}>
-                <label style={{
-                  fontFamily: 'var(--font-family-geist)', fontSize: '11px', fontWeight: 600,
-                  color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                }}>
-                  Company Name
-                </label>
-                <MultiSelect
-                  options={companyOptions}
-                  selected={filterCompany}
-                  onChange={v => { setFilterCompany(v); setPage(1); }}
-                  placeholder="All Companies"
-                  minWidth={180}
-                />
-              </div>
-
               {/* Date Period */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 260px', minWidth: 0 }}>
                 <label style={{
@@ -1292,9 +1260,9 @@ export function Quotation() {
                 </th>
 
                 {/* ── Quotation No. (frozen if visible) ── */}
-                {visibleCols.has('quoNo') && (
+                {visibleCols.has('quotationNumber') && (
                   <SortableTh
-                    colKey="quoNo"
+                    colKey="quotationNumber"
                     sortCol={sortCol}
                     sortDir={sortDir}
                     onSort={handleSort}
@@ -1302,7 +1270,7 @@ export function Quotation() {
                       ...thBase,
                       position: 'sticky', left: `${quoNoLeft}px`, zIndex: 21,
                       width: `${W_QUONO}px`,
-                      boxShadow: lastFrozenKey === 'quoNo' ? frozenDivider : undefined,
+                      boxShadow: lastFrozenKey === 'quotationNumber' ? frozenDivider : undefined,
                     }}
                   >
                     Quotation No.
@@ -1411,22 +1379,22 @@ export function Quotation() {
                         onEdit={() => { setEditQuo(q); setShowCreate(true); }}
                         onSend={() => setSendQuo(q)}
                         onConvert={() => setConvertQuo(q)}
-                        onMarkLost={() => setLostQuo(q)}
+                        onSign={() => setSignQuo(q)}
                         onDuplicate={() => handleDuplicate(q)}
                         onDelete={() => handleDelete(q.id)}
                       />
                     </td>
 
                     {/* ── Quotation No. (frozen) ── */}
-                    {visibleCols.has('quoNo') && (
+                    {visibleCols.has('quotationNumber') && (
                       <td style={{
                         ...tdBase,
                         position: 'sticky', left: `${quoNoLeft}px`, zIndex: 10,
                         backgroundColor: fbg,
-                        boxShadow: lastFrozenKey === 'quoNo' ? frozenDivider : undefined,
+                        boxShadow: lastFrozenKey === 'quotationNumber' ? frozenDivider : undefined,
                       }}>
                         <span style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap' }}>
-                          {q.quoNo}
+                          {q.quotationNumber}
                         </span>
                       </td>
                     )}
@@ -1494,8 +1462,8 @@ export function Quotation() {
                             <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 400, color: 'var(--color-foreground)', whiteSpace: 'nowrap' }}>
                               {q.convertedAt}
                             </span>
-                            <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '11px', fontWeight: 500, color: q.status === 'won' ? '#10B981' : '#EF4444' }}>
-                              {q.status === 'won' ? 'Won' : q.status === 'lost' ? 'Lost' : ''}
+                            <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '11px', fontWeight: 500, color: '#10B981' }}>
+                              {q.status === 'salesOrder' ? 'Sales Order' : ''}
                             </span>
                           </div>
                         ) : (
@@ -1638,7 +1606,7 @@ export function Quotation() {
         onEdit={q => { setEditQuo(q); setShowCreate(true); setDetailQuo(null); }}
         onSend={q => setSendQuo(q)}
         onConvert={q => setConvertQuo(q)}
-        onMarkLost={q => setLostQuo(q)}
+        onSign={q => setSignQuo(q)}
         onDuplicate={handleDuplicate}
       />
       {showCreate && (
@@ -1648,10 +1616,10 @@ export function Quotation() {
             const isUpdate = !!(data.id && quotations.find(q => q.id === data.id));
             if (isUpdate) {
               setQuotations(p => p.map(q => q.id === data.id ? data : q));
-              showToast('success', 'Quotation Updated', `${data.quoNo} has been updated.`);
+              showToast('success', 'Quotation Updated', `${data.quotationNumber} has been updated.`);
             } else {
               setQuotations(p => [data, ...p]);
-              showToast('success', 'Quotation Created', `${data.quoNo} has been created successfully.`);
+              showToast('success', 'Quotation Created', `${data.quotationNumber} has been created successfully.`);
             }
             setShowCreate(false);
             setEditQuo(null);
@@ -1659,7 +1627,7 @@ export function Quotation() {
           onClose={() => { setShowCreate(false); setEditQuo(null); }}
         />
       )}
-      {lostQuo    && <MarkLostModal   quo={lostQuo}    onConfirm={handleMarkLost} onClose={() => setLostQuo(null)} />}
+      {signQuo    && <SignQuotationModal quo={signQuo}  onConfirm={handleSign}     onClose={() => setSignQuo(null)} />}
       {convertQuo && <ConvertSOModal  quo={convertQuo} onConfirm={handleConvert}  onClose={() => setConvertQuo(null)} />}
       {sendQuo    && <SendClientModal quo={sendQuo}                               onClose={() => setSendQuo(null)} />}
     </>

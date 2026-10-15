@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { FileText, ShieldCheck, ShieldOff } from 'lucide-react';
+import { ShieldCheck, ShieldOff } from 'lucide-react';
 import { primaryButtonStyle, secondaryButtonStyle, helperStyle } from '../../../../components/master/styles';
 import { StatusPill } from '../../../../components/master/StatusPill';
 import { useMasterData } from '../../../../core/masterStore';
@@ -31,15 +31,7 @@ export function ProfileTab({ client, showToast }: TabProps) {
   const company = masterData.companies.find(c => c.id === activeCompanyId);
 
   const city = masterData.cities.find(c => c.id === client.cityId)?.name ?? '—';
-  const industry = masterData.industries.find(c => c.id === client.industryId)?.name ?? '—';
   const sales = adminUsers.find(u => u.id === link?.salesId)?.name ?? '—';
-
-  const docs: { label: string; value: string | null }[] = [
-    { label: 'Tax Document', value: client.documents.taxDocument },
-    { label: 'SIUP', value: client.documents.siup },
-    { label: 'TDP', value: client.documents.tdp },
-    { label: 'Domisili', value: client.documents.domisili },
-  ];
 
   const handleToggleVerify = () => {
     if (!link) return;
@@ -63,24 +55,19 @@ export function ProfileTab({ client, showToast }: TabProps) {
           <Field label="Email" value={client.email} />
           <Field label="Website" value={client.website} />
           <Field label="City" value={city} />
-          <Field label="Zip Code" value={client.zipCode} />
-          <Field label="Industry" value={industry} />
-          <Field label="Tax Number" value={client.taxNumber} />
+          <Field label="Phone Number" value={client.phoneNumber} />
         </div>
-        <Field label="Billing Address" value={client.billingAddress} />
 
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
-          <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 700, color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>Documents</div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {docs.map(d => (
-              <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}>
-                <FileText size={14} style={{ color: d.value ? '#7C3AED' : 'var(--color-muted-foreground)' }} />
-                <span style={{ fontFamily: 'var(--font-family-geist)', fontSize: '13px', color: d.value ? 'var(--color-foreground)' : 'var(--color-muted-foreground)' }}>{d.label}</span>
-                {d.value && <a href={d.value} target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#7C3AED' }}>View</a>}
-              </div>
-            ))}
+        {(client.mainImage || client.npwpImage || client.digitalImage) && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
+            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', fontWeight: 700, color: 'var(--color-muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>Images</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {client.mainImage && <div style={{ padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', fontSize: '13px' }}>Main Image <a href={client.mainImage} target="_blank" rel="noreferrer" style={{ color: '#7C3AED', marginLeft: 6 }}>View</a></div>}
+              {client.npwpImage && <div style={{ padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', fontSize: '13px' }}>NPWP Image <a href={client.npwpImage} target="_blank" rel="noreferrer" style={{ color: '#7C3AED', marginLeft: 6 }}>View</a></div>}
+              {client.digitalImage && <div style={{ padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', fontSize: '13px' }}>Digital Image <a href={client.digitalImage} target="_blank" rel="noreferrer" style={{ color: '#7C3AED', marginLeft: 6 }}>View</a></div>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div style={{ backgroundColor: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: 20 }}>

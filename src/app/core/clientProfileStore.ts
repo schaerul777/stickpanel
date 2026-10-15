@@ -5,7 +5,7 @@ import { type BaseRecord, getMasterState } from './masterStore';
 // A sibling in-memory store to masterStore.ts (same createStore/useSyncExternalStore
 // pattern), holding CORE 4's Client Profile feature: clients, their per-company
 // links, contacts, billings, and bank accounts. References into masterStore
-// (companies, cities, industries, brands, banks) are by id.
+// (companies, cities, brands, banks) are by id.
 
 type Listener = () => void;
 
@@ -45,13 +45,6 @@ export interface AdminUser {
   role: 'Sales' | 'Finance';
 }
 
-export interface ClientDocuments {
-  taxDocument: string | null;
-  siup: string | null;
-  tdp: string | null;
-  domisili: string | null;
-}
-
 export interface ClientRecord extends BaseRecord {
   name: string;
   brandText: string;
@@ -59,11 +52,10 @@ export interface ClientRecord extends BaseRecord {
   email: string;
   website: string;
   cityId: string;
-  zipCode: string;
-  billingAddress: string;
-  industryId: string;
-  taxNumber: string;
-  documents: ClientDocuments;
+  phoneNumber: string;
+  mainImage: string | null;
+  npwpImage: string | null;
+  digitalImage: string | null;
 }
 
 export interface ClientCompanyLink {
@@ -81,23 +73,17 @@ export interface ClientCompanyLink {
   updatedAt: string;
 }
 
-export interface ContactPhone {
-  number: string;
-  type: 'Mobile' | 'Office';
-}
-
 export interface ClientContact {
   id: string;
   clientId: string;
-  companyId: string;
   salutation: 'Mr' | 'Mrs' | 'Ms';
   name: string;
   position: string;
   email: string;
-  officeEmail: string;
-  phones: ContactPhone[];
+  mobileNumber: string;
+  phoneNumber: string;
   active: boolean;
-  isPrimaryForCompany: boolean;
+  primaryContact: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -105,19 +91,16 @@ export interface ClientContact {
 export interface ClientBilling {
   id: string;
   clientId: string;
+  key: string;
   name: string;
   email: string;
   phoneNumber: string;
-  mobileNumber: string;
   faxNumber: string;
   billingAddress: string;
   shippingAddress: string;
   primary: boolean;
-  npwp: string;
-  ktp: string;
-  npwpImage: string | null;
-  ktpImage: string | null;
-  extraNotes: string;
+  copyImage: string | null;
+  extra: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -126,9 +109,11 @@ export interface ClientBankAccount {
   id: string;
   clientId: string;
   bankId: string;
-  accountHolder: string;
-  accountNumber: string;
+  name: string;
+  holder: string;
+  number: string;
   branch: string;
+  primary: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,7 +132,6 @@ interface ClientProfileState {
 const ms = getMasterState();
 const companyId = (i: number) => ms.companies[i].id;
 const cityId = (i: number) => ms.cities[i].id;
-const industryId = (i: number) => ms.industries[i].id;
 const brandId = (i: number) => ms.brands[i].id;
 const bankId = (i: number) => ms.banks[i].id;
 
@@ -163,30 +147,30 @@ const sales = (i: number) => adminUsers[i].id;
 
 interface ClientSeed {
   name: string; brandText: string; brandIdx: number | null; email: string; website: string;
-  cityIdx: number; zipCode: string; billingAddress: string; industryIdx: number; taxNumber: string;
+  cityIdx: number; phoneNumber: string;
   links: { companyIdx: number; salesIdx: number; verified: boolean; hasQuotations?: boolean }[];
 }
 
 const clientSeeds: ClientSeed[] = [
-  { name: 'CV Sinar Boga Nusantara', brandText: 'Nusantara Kopi', brandIdx: 0, email: 'contact@sinarboga.co.id', website: 'https://sinarboga.co.id', cityIdx: 0, zipCode: '12190', billingAddress: 'Jl. Sudirman No. 45, Jakarta Selatan', industryIdx: 0, taxNumber: '01.234.567.8-901.000',
+  { name: 'CV Sinar Boga Nusantara', brandText: 'Nusantara Kopi', brandIdx: 0, email: 'contact@sinarboga.co.id', website: 'https://sinarboga.co.id', cityIdx: 0, phoneNumber: '021-5551000',
     links: [{ companyIdx: 0, salesIdx: 0, verified: true, hasQuotations: true }, { companyIdx: 1, salesIdx: 1, verified: false }] },
-  { name: 'PT Otomotif Jaya Perkasa', brandText: 'Garuda Mobile', brandIdx: 1, email: 'info@jayaperkasa.id', website: 'https://jayaperkasa.id', cityIdx: 1, zipCode: '60271', billingAddress: 'Jl. Basuki Rahmat No. 88, Surabaya', industryIdx: 2, taxNumber: '02.345.678.9-012.000',
+  { name: 'PT Otomotif Jaya Perkasa', brandText: 'Garuda Mobile', brandIdx: 1, email: 'info@jayaperkasa.id', website: 'https://jayaperkasa.id', cityIdx: 1, phoneNumber: '031-5552000',
     links: [{ companyIdx: 0, salesIdx: 0, verified: true }, { companyIdx: 2, salesIdx: 2, verified: false }] },
-  { name: 'PT Properti Cemerlang', brandText: 'Cemerlang Land', brandIdx: null, email: 'admin@cemerlangland.id', website: '', cityIdx: 2, zipCode: '40115', billingAddress: 'Jl. Asia Afrika No. 21, Bandung', industryIdx: 4, taxNumber: '03.456.789.0-123.000',
+  { name: 'PT Properti Cemerlang', brandText: 'Cemerlang Land', brandIdx: null, email: 'admin@cemerlangland.id', website: '', cityIdx: 2, phoneNumber: '022-5553000',
     links: [{ companyIdx: 1, salesIdx: 1, verified: true }] },
-  { name: 'Toko Elektronik Merapi', brandText: 'Cakra Elektronik', brandIdx: 3, email: 'toko@cakraelektronik.id', website: 'https://cakraelektronik.id', cityIdx: 7, zipCode: '55223', billingAddress: 'Jl. Malioboro No. 10, Yogyakarta', industryIdx: 1, taxNumber: '04.567.890.1-234.000',
+  { name: 'Toko Elektronik Merapi', brandText: 'Cakra Elektronik', brandIdx: 3, email: 'toko@cakraelektronik.id', website: 'https://cakraelektronik.id', cityIdx: 7, phoneNumber: '0274-5554000',
     links: [{ companyIdx: 0, salesIdx: 2, verified: false }] },
-  { name: 'PT Fintech Nusantara Digital', brandText: 'Rajawali Finance', brandIdx: 7, email: 'hello@rajawalifinance.id', website: 'https://rajawalifinance.id', cityIdx: 0, zipCode: '12950', billingAddress: 'Jl. HR Rasuna Said Kav. 5, Jakarta', industryIdx: 6, taxNumber: '05.678.901.2-345.000',
+  { name: 'PT Fintech Nusantara Digital', brandText: 'Rajawali Finance', brandIdx: 7, email: 'hello@rajawalifinance.id', website: 'https://rajawalifinance.id', cityIdx: 0, phoneNumber: '021-5555000',
     links: [{ companyIdx: 3, salesIdx: 3, verified: true }] },
-  { name: 'CV Fashion Melati Indah', brandText: 'Melati Kosmetik', brandIdx: 8, email: 'order@melatiindah.id', website: '', cityIdx: 4, zipCode: '50134', billingAddress: 'Jl. Pandanaran No. 33, Semarang', industryIdx: 1, taxNumber: '06.789.012.3-456.000',
+  { name: 'CV Fashion Melati Indah', brandText: 'Melati Kosmetik', brandIdx: 8, email: 'order@melatiindah.id', website: '', cityIdx: 4, phoneNumber: '024-5556000',
     links: [{ companyIdx: 1, salesIdx: 1, verified: false }] },
-  { name: 'PT Sekolah Cerdas Bangsa', brandText: 'Cerdas Bangsa', brandIdx: null, email: 'admin@cerdasbangsa.sch.id', website: 'https://cerdasbangsa.sch.id', cityIdx: 3, zipCode: '20154', billingAddress: 'Jl. Gatot Subroto No. 7, Medan', industryIdx: 7, taxNumber: '07.890.123.4-567.000',
+  { name: 'PT Sekolah Cerdas Bangsa', brandText: 'Cerdas Bangsa', brandIdx: null, email: 'admin@cerdasbangsa.sch.id', website: 'https://cerdasbangsa.sch.id', cityIdx: 3, phoneNumber: '061-5557000',
     links: [{ companyIdx: 2, salesIdx: 2, verified: true }] },
-  { name: 'PT Teknologi Awan Biru', brandText: 'Awan Biru Cloud', brandIdx: null, email: 'contact@awanbiru.tech', website: 'https://awanbiru.tech', cityIdx: 0, zipCode: '12440', billingAddress: 'Jl. TB Simatupang No. 18, Jakarta Selatan', industryIdx: 5, taxNumber: '08.901.234.5-678.000',
+  { name: 'PT Teknologi Awan Biru', brandText: 'Awan Biru Cloud', brandIdx: null, email: 'contact@awanbiru.tech', website: 'https://awanbiru.tech', cityIdx: 0, phoneNumber: '021-5558000',
     links: [{ companyIdx: 0, salesIdx: 0, verified: true }, { companyIdx: 3, salesIdx: 3, verified: true }] },
-  { name: 'CV Kuliner Rasa Ibu', brandText: 'Khatulistiwa Snack', brandIdx: 6, email: 'order@rasaibu.id', website: '', cityIdx: 5, zipCode: '90111', billingAddress: 'Jl. Somba Opu No. 60, Makassar', industryIdx: 0, taxNumber: '09.012.345.6-789.000',
+  { name: 'CV Kuliner Rasa Ibu', brandText: 'Khatulistiwa Snack', brandIdx: 6, email: 'order@rasaibu.id', website: '', cityIdx: 5, phoneNumber: '0411-5559000',
     links: [{ companyIdx: 2, salesIdx: 4, verified: false }] },
-  { name: 'PT Otomotif Prima Sejahtera', brandText: 'Samudra Otomotif', brandIdx: 5, email: 'sales@primasejahtera.id', website: 'https://primasejahtera.id', cityIdx: 6, zipCode: '80228', billingAddress: 'Jl. Teuku Umar No. 5, Denpasar', industryIdx: 2, taxNumber: '10.123.456.7-890.000',
+  { name: 'PT Otomotif Prima Sejahtera', brandText: 'Samudra Otomotif', brandIdx: 5, email: 'sales@primasejahtera.id', website: 'https://primasejahtera.id', cityIdx: 6, phoneNumber: '0361-5550000',
     links: [{ companyIdx: 3, salesIdx: 3, verified: true }] },
 ];
 
@@ -214,11 +198,10 @@ function buildSeed() {
       email: seed.email,
       website: seed.website,
       cityId: cityId(seed.cityIdx),
-      zipCode: seed.zipCode,
-      billingAddress: seed.billingAddress,
-      industryId: industryId(seed.industryIdx),
-      taxNumber: seed.taxNumber,
-      documents: { taxDocument: null, siup: null, tdp: null, domisili: null },
+      phoneNumber: seed.phoneNumber,
+      mainImage: null,
+      npwpImage: null,
+      digitalImage: null,
       createdAt, updatedAt: daysAgoISO(10 - (i % 8)), deletedAt: null,
     });
 
@@ -243,51 +226,51 @@ function buildSeed() {
       const nameA = CONTACT_NAME_POOL[(i * 2 + li) % CONTACT_NAME_POOL.length];
       const nameB = CONTACT_NAME_POOL[(i * 2 + li + 1) % CONTACT_NAME_POOL.length];
       contacts.push({
-        id: nextId('contact'), clientId, companyId: companyId(l.companyIdx),
+        id: nextId('contact'), clientId,
         salutation: 'Mr', name: nameA, position: 'Marketing Manager',
         email: `${nameA.toLowerCase().replace(/\s+/g, '.')}.${i}${li}@${seed.name.split(' ')[0].toLowerCase()}.co.id`,
-        officeEmail: '', phones: [{ number: `08${1100000000 + i * 1000 + li}`, type: 'Mobile' }],
-        active: true, isPrimaryForCompany: true,
+        mobileNumber: `08${1100000000 + i * 1000 + li}`, phoneNumber: '',
+        active: true, primaryContact: true,
         createdAt, updatedAt: createdAt,
       });
       contacts.push({
-        id: nextId('contact'), clientId, companyId: companyId(l.companyIdx),
+        id: nextId('contact'), clientId,
         salutation: 'Ms', name: nameB, position: 'Finance Staff',
         email: `${nameB.toLowerCase().replace(/\s+/g, '.')}.${i}${li}@${seed.name.split(' ')[0].toLowerCase()}.co.id`,
-        officeEmail: '', phones: [{ number: `08${1200000000 + i * 1000 + li}`, type: 'Mobile' }, { number: `021${5000000 + i}`, type: 'Office' }],
-        active: true, isPrimaryForCompany: false,
+        mobileNumber: `08${1200000000 + i * 1000 + li}`, phoneNumber: `021${5000000 + i}`,
+        active: true, primaryContact: false,
         createdAt, updatedAt: createdAt,
       });
     });
 
     // Billings — 1 primary for every client, a 2nd (non-primary) for the first three.
     billings.push({
-      id: nextId('billing'), clientId, name: `${seed.name} - Head Office`, email: seed.email,
-      phoneNumber: '021-5551000', mobileNumber: '0812-1000-000', faxNumber: '',
-      billingAddress: seed.billingAddress, shippingAddress: seed.billingAddress,
-      primary: true, npwp: seed.taxNumber, ktp: '', npwpImage: null, ktpImage: null, extraNotes: '',
+      id: nextId('billing'), clientId, key: `BIL-${i}-0`, name: `${seed.name} - Head Office`, email: seed.email,
+      phoneNumber: '021-5551000', faxNumber: '',
+      billingAddress: `Jl. Sudirman No. ${45 + i}, Jakarta Selatan`, shippingAddress: `Jl. Sudirman No. ${45 + i}, Jakarta Selatan`,
+      primary: true, copyImage: null, extra: '',
       createdAt, updatedAt: createdAt,
     });
     if (i < 3) {
       billings.push({
-        id: nextId('billing'), clientId, name: `${seed.name} - Branch Office`, email: seed.email,
-        phoneNumber: '021-5552000', mobileNumber: '0812-2000-000', faxNumber: '',
-        billingAddress: seed.billingAddress, shippingAddress: '', primary: false,
-        npwp: '', ktp: '', npwpImage: null, ktpImage: null, extraNotes: 'Branch billing contact',
+        id: nextId('billing'), clientId, key: `BIL-${i}-1`, name: `${seed.name} - Branch Office`, email: seed.email,
+        phoneNumber: '021-5552000', faxNumber: '',
+        billingAddress: `Jl. Sudirman No. ${45 + i}, Jakarta Selatan`, shippingAddress: '', primary: false,
+        copyImage: null, extra: 'Branch billing contact',
         createdAt, updatedAt: createdAt,
       });
     }
 
     // Bank accounts — 1 for every client, a 2nd for the first three.
     bankAccounts.push({
-      id: nextId('bank-acct'), clientId, bankId: bankId(i % 6), accountHolder: seed.name,
-      accountNumber: String(1000000000 + i * 111111), branch: 'Jakarta Pusat',
+      id: nextId('bank-acct'), clientId, bankId: bankId(i % 6), name: `Main Account`, holder: seed.name,
+      number: String(1000000000 + i * 111111), branch: 'Jakarta Pusat', primary: true,
       createdAt, updatedAt: createdAt,
     });
     if (i < 3) {
       bankAccounts.push({
-        id: nextId('bank-acct'), clientId, bankId: bankId((i + 2) % 6), accountHolder: seed.name,
-        accountNumber: String(2000000000 + i * 111111), branch: 'Surabaya',
+        id: nextId('bank-acct'), clientId, bankId: bankId((i + 2) % 6), name: `Secondary Account`, holder: seed.name,
+        number: String(2000000000 + i * 111111), branch: 'Surabaya', primary: false,
         createdAt, updatedAt: createdAt,
       });
     }
@@ -321,15 +304,10 @@ export function getClient(id: string): ClientRecord | undefined {
   return store.getState().clients.find(c => c.id === id);
 }
 
-export function findClientByTaxNumber(taxNumber: string, excludeId?: string): ClientRecord | undefined {
-  const norm = taxNumber.trim();
-  return store.getState().clients.find(c => c.deletedAt === null && c.id !== excludeId && c.taxNumber.trim() === norm);
-}
-
 export interface ClientFormInput {
   name: string; brandText: string; brandId: string | null; email: string; website: string;
-  cityId: string; zipCode: string; billingAddress: string; industryId: string; taxNumber: string;
-  documents: ClientDocuments;
+  cityId: string; phoneNumber: string;
+  mainImage: string | null; npwpImage: string | null; digitalImage: string | null;
 }
 
 /** Creates a client and, on create, its first company link. Returns the new/updated client id. */
@@ -410,8 +388,8 @@ export function setLinkVerified(linkId: string, verified: boolean, adminUserName
 
 // ─── Contacts ───────────────────────────────────────────────────────────────
 
-export function getContactsForClientCompany(clientId: string, companyId: string): ClientContact[] {
-  return store.getState().contacts.filter(c => c.clientId === clientId && c.companyId === companyId);
+export function getContactsForClient(clientId: string): ClientContact[] {
+  return store.getState().contacts.filter(c => c.clientId === clientId);
 }
 
 export function isContactEmailTaken(email: string, excludeId?: string): boolean {
@@ -420,22 +398,22 @@ export function isContactEmailTaken(email: string, excludeId?: string): boolean 
 }
 
 export interface ContactFormInput {
-  salutation: 'Mr' | 'Mrs' | 'Ms'; name: string; position: string; email: string; officeEmail: string;
-  phones: ContactPhone[]; active: boolean; isPrimaryForCompany: boolean;
+  salutation: 'Mr' | 'Mrs' | 'Ms'; name: string; position: string; email: string;
+  mobileNumber: string; phoneNumber: string; active: boolean; primaryContact: boolean;
 }
 
-export function upsertContact(clientId: string, companyId: string, data: ContactFormInput, id?: string) {
+export function upsertContact(clientId: string, data: ContactFormInput, id?: string) {
   store.setState(s => {
     let contacts = s.contacts;
-    if (data.isPrimaryForCompany) {
-      contacts = contacts.map(c => (c.clientId === clientId && c.companyId === companyId && c.id !== id)
-        ? { ...c, isPrimaryForCompany: false } : c);
+    if (data.primaryContact) {
+      contacts = contacts.map(c => (c.clientId === clientId && c.id !== id)
+        ? { ...c, primaryContact: false } : c);
     }
     if (id) {
       contacts = contacts.map(c => c.id === id ? { ...c, ...data, updatedAt: touch() } : c);
     } else {
       const rec: ClientContact = {
-        ...data, id: nextId('contact'), clientId, companyId,
+        ...data, id: nextId('contact'), clientId,
         createdAt: touch(), updatedAt: touch(),
       };
       contacts = [rec, ...contacts];
@@ -487,11 +465,15 @@ export type BankAccountFormInput = Omit<ClientBankAccount, 'id' | 'clientId' | '
 
 export function upsertBankAccount(clientId: string, data: BankAccountFormInput, id?: string) {
   store.setState(s => {
+    let bankAccounts = s.bankAccounts;
+    if (data.primary) {
+      bankAccounts = bankAccounts.map(b => (b.clientId === clientId && b.id !== id) ? { ...b, primary: false } : b);
+    }
     if (id) {
-      return { ...s, bankAccounts: s.bankAccounts.map(b => b.id === id ? { ...b, ...data, updatedAt: touch() } : b) };
+      return { ...s, bankAccounts: bankAccounts.map(b => b.id === id ? { ...b, ...data, updatedAt: touch() } : b) };
     }
     const rec: ClientBankAccount = { ...data, id: nextId('bank-acct'), clientId, createdAt: touch(), updatedAt: touch() };
-    return { ...s, bankAccounts: [rec, ...s.bankAccounts] };
+    return { ...s, bankAccounts: [rec, ...bankAccounts] };
   });
 }
 
@@ -501,8 +483,9 @@ export function deleteBankAccount(id: string) {
 
 // ─── Reference counts (used to block deleting Industry / Bank master records) ──
 
-export function countClientsUsingIndustry(industryId: string): number {
-  return store.getState().clients.filter(c => c.deletedAt === null && c.industryId === industryId).length;
+export function countClientsUsingIndustry(_industryId: string): number {
+  // industryId removed from ClientRecord per ERD; always return 0 now
+  return 0;
 }
 
 export function countBankAccountsUsingBank(bankId: string): number {

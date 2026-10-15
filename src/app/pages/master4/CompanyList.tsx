@@ -8,7 +8,11 @@ import { ConfirmDialog } from '../../components/master/ConfirmDialog';
 import { RowActions } from '../../components/master/RowActions';
 import { primaryButtonStyle } from '../../components/master/styles';
 import { useToast, ToastContainer } from '../../components/Toast';
-import { useMasterData, formatDate, countProductsUsingCompany, softDeleteCompany, restoreCompany, type CompanyRecord } from '../../core/masterStore';
+import {
+  useMasterData, formatDate,
+  softDeleteCompany, restoreCompany, countProductsUsingCompany,
+  type CompanyRecord,
+} from '../../core/masterStore';
 
 const PAGE_SIZE = 8;
 
@@ -29,7 +33,7 @@ export function CompanyList() {
     const q = search.trim().toLowerCase();
     return data.companies
       .filter(r => showDeleted ? true : r.deletedAt === null)
-      .filter(r => !q || r.name.toLowerCase().includes(q) || r.abbr.toLowerCase().includes(q))
+      .filter(r => !q || r.name.toLowerCase().includes(q) || r.quotationPrefix.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [data.companies, search, showDeleted]);
 
@@ -47,9 +51,9 @@ export function CompanyList() {
       </div>
     ) },
     { key: 'name', label: 'Name', sortable: true, render: r => <span style={{ fontWeight: 500 }}>{r.name}</span> },
-    { key: 'abbr', label: 'Abbr', render: r => <span style={{ fontFamily: 'monospace' }}>{r.abbr}</span> },
-    { key: 'phone', label: 'Phone', render: r => r.phone || <span style={{ color: 'var(--color-muted-foreground)' }}>—</span> },
-    { key: 'url', label: 'URL', render: r => r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: '#7C3AED' }} onClick={e => e.stopPropagation()}>{r.url}</a> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span> },
+    { key: 'quotationPrefix', label: 'Quotation Prefix', render: r => <span style={{ fontFamily: 'monospace' }}>{r.quotationPrefix}</span> },
+    { key: 'phone', label: 'Phone', render: r => r.phone || '—' },
+    { key: 'url', label: 'URL', render: r => r.url ? <a href={r.url} target="_blank" rel="noreferrer" style={{ color: '#7C3AED', textDecoration: 'none' }}>{r.url}</a> : '—' },
     { key: 'products', label: 'Products', render: r => countProductsUsingCompany(r.id) },
     { key: 'updatedAt', label: 'Updated at', render: r => <span style={{ color: 'var(--color-muted-foreground)' }}>{formatDate(r.updatedAt)}</span> },
     { key: 'actions', label: 'Actions', render: r => (
@@ -69,7 +73,7 @@ export function CompanyList() {
         core="core-4"
         trail={['Master', 'Company']}
         title="Company"
-        subtitle="Manage the companies quotations are issued under"
+        subtitle="Manage company entities for quotation headers"
         actions={<button style={primaryButtonStyle} onClick={() => navigate('/core-4/master/company/new')}><Plus size={15} /> Add Company</button>}
       />
 

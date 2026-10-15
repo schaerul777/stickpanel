@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { PageHeader } from '../../../components/master/PageHeader';
-import { FileUpload } from '../../../components/master/FileUpload';
+import { ImageUpload } from '../../../components/master/ImageUpload';
 import { ActiveCompanyBar } from '../../../components/master/ActiveCompanyBar';
 import { inputStyle, selectStyle, labelStyle, helperStyle, errorTextStyle, primaryButtonStyle, secondaryButtonStyle } from '../../../components/master/styles';
 import { useToast, ToastContainer } from '../../../components/Toast';
 import { useMasterData } from '../../../core/masterStore';
 import { useClientProfileUI } from '../../../core/clientProfileUI';
 import {
-  getClient, findClientByTaxNumber, upsertClient, addCompanyLink, getLink,
-  adminUsers, type ClientDocuments,
+  getClient, upsertClient, addCompanyLink, getLink,
+  adminUsers,
 } from '../../../core/clientProfileStore';
 
-const textareaStyle = { ...inputStyle, minHeight: 80, resize: 'vertical' as const, fontFamily: 'var(--font-family-geist)' };
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function CardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -22,8 +22,6 @@ function CardSection({ title, children }: { title: string; children: React.React
     </div>
   );
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ClientProfileForm() {
   const navigate = useNavigate();
@@ -39,27 +37,17 @@ export function ClientProfileForm() {
   const [email, setEmail] = useState(existing?.email ?? '');
   const [website, setWebsite] = useState(existing?.website ?? '');
   const [cityId, setCityId] = useState(existing?.cityId ?? masterData.cities[0]?.id ?? '');
-  const [zipCode, setZipCode] = useState(existing?.zipCode ?? '');
-  const [billingAddress, setBillingAddress] = useState(existing?.billingAddress ?? '');
-  const [industryId, setIndustryId] = useState(existing?.industryId ?? masterData.industries[0]?.id ?? '');
-  const [taxNumber, setTaxNumber] = useState(existing?.taxNumber ?? '');
-  const [documents, setDocuments] = useState<ClientDocuments>(existing?.documents ?? { taxDocument: null, siup: null, tdp: null, domisili: null });
-  const [docNames, setDocNames] = useState<Record<keyof ClientDocuments, string | null>>({ taxDocument: null, siup: null, tdp: null, domisili: null });
+  const [phoneNumber, setPhoneNumber] = useState(existing?.phoneNumber ?? '');
+  const [mainImage, setMainImage] = useState<string | null>(existing?.mainImage ?? null);
+  const [npwpImage, setNpwpImage] = useState<string | null>(existing?.npwpImage ?? null);
+  const [digitalImage, setDigitalImage] = useState<string | null>(existing?.digitalImage ?? null);
 
   const [salesId, setSalesId] = useState(adminUsers[0]?.id ?? '');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [dupDialog, setDupDialog] = useState<{ name: string; clientId: string } | null>(null);
 
   const existingLink = existing ? getLink(existing.id, activeCompanyId) : undefined;
-
-  const handleTaxNumberBlur = () => {
-    const trimmed = taxNumber.trim();
-    if (!trimmed) return;
-    const match = findClientByTaxNumber(trimmed, existing?.id);
-    if (match) setDupDialog({ name: match.name, clientId: match.id });
-  };
 
   const handleSave = () => {
     const e: Record<string, string> = {};
@@ -67,20 +55,14 @@ export function ClientProfileForm() {
     if (!email.trim()) e.email = 'Email is required';
     else if (!EMAIL_RE.test(email.trim())) e.email = 'Enter a valid email address';
     if (!cityId) e.cityId = 'City is required';
-    if (!billingAddress.trim()) e.billingAddress = 'Billing address is required';
-    if (!industryId) e.industryId = 'Industry is required';
-    if (!taxNumber.trim()) e.taxNumber = 'Tax number is required';
     if (Object.keys(e).length) { setErrors(e); return; }
-
-    const dup = findClientByTaxNumber(taxNumber.trim(), existing?.id);
-    if (dup) { setDupDialog({ name: dup.name, clientId: dup.id }); return; }
 
     setSaving(true);
     setTimeout(() => {
       const newId = upsertClient({
         name: name.trim(), brandText: brandText.trim(), brandId: brandId || null,
-        email: email.trim(), website: website.trim(), cityId, zipCode: zipCode.trim(),
-        billingAddress: billingAddress.trim(), industryId, taxNumber: taxNumber.trim(), documents,
+        email: email.trim(), website: website.trim(), cityId, phoneNumber: phoneNumber.trim(),
+        mainImage, npwpImage, digitalImage,
       }, existing?.id);
 
       if (!existing && activeCompanyId) {
@@ -91,11 +73,6 @@ export function ClientProfileForm() {
       showToast('success', existing ? 'Client updated' : 'Client added', existing ? 'Changes have been saved.' : 'New client has been added.');
       navigate(existing ? `/core-4/master/client-profile/${existing.id}` : `/core-4/master/client-profile/${newId}`);
     }, 350);
-  };
-
-  const setDoc = (key: keyof ClientDocuments) => (dataUrl: string | null, fileName: string | null) => {
-    setDocuments(d => ({ ...d, [key]: dataUrl }));
-    setDocNames(n => ({ ...n, [key]: fileName }));
   };
 
   return (
@@ -120,7 +97,7 @@ export function ClientProfileForm() {
         {!existing && <ActiveCompanyBar />}
       </div>
 
-      <CardSection title="Company Details">
+      <CardSection title="Client Details">
         <div>
           <label style={labelStyle}>Name <span style={{ color: '#EF4444' }}>*</span></label>
           <input value={name} onChange={e => { setName(e.target.value); if (errors.name) setErrors(x => ({ ...x, name: '' })); }} style={{ ...inputStyle, borderColor: errors.name ? '#EF4444' : 'var(--color-border)' }} />
@@ -153,7 +130,7 @@ export function ClientProfileForm() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <label style={labelStyle}>City <span style={{ color: '#EF4444' }}>*</span></label>
             <select value={cityId} onChange={e => { setCityId(e.target.value); if (errors.cityId) setErrors(x => ({ ...x, cityId: '' })); }} style={{ ...selectStyle, borderColor: errors.cityId ? '#EF4444' : 'var(--color-border)' }}>
@@ -161,43 +138,17 @@ export function ClientProfileForm() {
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Zip Code</label>
-            <input value={zipCode} onChange={e => setZipCode(e.target.value)} style={inputStyle} />
-          </div>
-        </div>
-
-        <div>
-          <label style={labelStyle}>Billing Address <span style={{ color: '#EF4444' }}>*</span></label>
-          <textarea value={billingAddress} onChange={e => { setBillingAddress(e.target.value); if (errors.billingAddress) setErrors(x => ({ ...x, billingAddress: '' })); }} style={{ ...textareaStyle, borderColor: errors.billingAddress ? '#EF4444' : 'var(--color-border)' }} />
-          {errors.billingAddress && <div style={errorTextStyle}>{errors.billingAddress}</div>}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div>
-            <label style={labelStyle}>Industry <span style={{ color: '#EF4444' }}>*</span></label>
-            <select value={industryId} onChange={e => setIndustryId(e.target.value)} style={selectStyle}>
-              {masterData.industries.filter(c => !c.deletedAt).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Tax Number <span style={{ color: '#EF4444' }}>*</span></label>
-            <input
-              value={taxNumber}
-              onChange={e => { setTaxNumber(e.target.value); if (errors.taxNumber) setErrors(x => ({ ...x, taxNumber: '' })); }}
-              onBlur={handleTaxNumberBlur}
-              style={{ ...inputStyle, borderColor: errors.taxNumber ? '#EF4444' : 'var(--color-border)' }}
-            />
-            {errors.taxNumber && <div style={errorTextStyle}>{errors.taxNumber}</div>}
+            <label style={labelStyle}>Phone Number</label>
+            <input value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} style={inputStyle} />
           </div>
         </div>
       </CardSection>
 
-      <CardSection title="Documents">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          <FileUpload label="Tax Document" value={documents.taxDocument} fileName={docNames.taxDocument} onChange={setDoc('taxDocument')} />
-          <FileUpload label="SIUP" value={documents.siup} fileName={docNames.siup} onChange={setDoc('siup')} />
-          <FileUpload label="TDP" value={documents.tdp} fileName={docNames.tdp} onChange={setDoc('tdp')} />
-          <FileUpload label="Domisili" value={documents.domisili} fileName={docNames.domisili} onChange={setDoc('domisili')} />
+      <CardSection title="Images">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+          <ImageUpload label="Main Image" value={mainImage} onChange={setMainImage} />
+          <ImageUpload label="NPWP Image" value={npwpImage} onChange={setNpwpImage} />
+          <ImageUpload label="Digital Image" value={digitalImage} onChange={setDigitalImage} />
         </div>
       </CardSection>
 
@@ -232,28 +183,6 @@ export function ClientProfileForm() {
       {existing && existingLink && (
         <div style={helperStyle}>
           This company's Sales / Verified status is managed from the Companies tab on the client's detail page.
-        </div>
-      )}
-
-      {dupDialog && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9100, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 440, backgroundColor: 'var(--color-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', padding: 24 }}>
-            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-16)', fontWeight: 700, color: 'var(--color-foreground)', marginBottom: 10 }}>
-              Client already exists: {dupDialog.name}
-            </div>
-            <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', color: 'var(--color-muted-foreground)', marginBottom: 20 }}>
-              Link to {masterData.companies.find(c => c.id === activeCompanyId)?.name ?? 'this company'}?
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button style={secondaryButtonStyle} onClick={() => setDupDialog(null)}>Cancel</button>
-              <button
-                style={primaryButtonStyle}
-                onClick={() => navigate(`/core-4/master/client-profile/${dupDialog.clientId}`, { state: { openAddCompany: true } })}
-              >
-                Link
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Eye, EyeOff, ShieldAlert, Landmark } from 'lucide-react';
+import { Plus, Pencil, Trash2, Eye, EyeOff, ShieldAlert, Landmark, Star } from 'lucide-react';
 import { MasterTable, type MasterColumn } from '../../../../components/master/MasterTable';
 import { FormDrawer } from '../../../../components/master/FormDrawer';
 import { ConfirmDialog } from '../../../../components/master/ConfirmDialog';
 import { EmptyState } from '../../../../components/EmptyState';
 import { inputStyle, selectStyle, labelStyle, errorTextStyle, primaryButtonStyle } from '../../../../components/master/styles';
+import { Switch } from '../../../../components/master/Switch';
 import { hasPermission } from '../../../../core/clientProfileUI';
 import {
   useClientProfileData, getBankAccountsForClient, upsertBankAccount, deleteBankAccount,
@@ -31,7 +32,7 @@ function mask(accountNumber: string): string {
 export function BankAccountsTab({ client, showToast }: TabProps) {
   useClientProfileData();
   const masterData = useMasterData();
-  const accounts = getBankAccountsForClient(client.id);
+  const accounts = getBankAccountsForClient(client.id).sort((a, b) => Number(b.primary) - Number(a.primary));
   const [drawerRecord, setDrawerRecord] = useState<ClientBankAccount | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<ClientBankAccount | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
@@ -47,11 +48,17 @@ export function BankAccountsTab({ client, showToast }: TabProps) {
   const bankName = (id: string) => masterData.banks.find(b => b.id === id)?.name ?? '—';
 
   const columns: MasterColumn<ClientBankAccount>[] = [
+    { key: 'name', label: 'Name', render: r => (
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
+        {r.primary && <Star size={13} style={{ color: '#F59E0B', fill: '#F59E0B' }} />}
+        {r.name || '—'}
+      </span>
+    ) },
     { key: 'bank', label: 'Bank', render: r => bankName(r.bankId) },
-    { key: 'holder', label: 'Account Holder', render: r => r.accountHolder },
+    { key: 'holder', label: 'Holder', render: r => r.holder },
     { key: 'number', label: 'Account Number', render: r => (
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'monospace' }}>
-        {revealed.has(r.id) ? r.accountNumber : mask(r.accountNumber)}
+        {revealed.has(r.id) ? r.number : mask(r.number)}
         <button
           onClick={() => setRevealed(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })}
           style={{ ...iconBtn, padding: 4 }} aria-label={revealed.has(r.id) ? 'Hide' : 'Reveal'}
@@ -97,7 +104,7 @@ export function BankAccountsTab({ client, showToast }: TabProps) {
       {deleteTarget && (
         <ConfirmDialog
           title="Delete Bank Account?"
-          message={`Are you sure you want to delete this bank account for "${deleteTarget.accountHolder}"?`}
+          message={`Are you sure you want to delete this bank account for "${deleteTarget.holder}"?`}
           onClose={() => setDeleteTarget(null)}
           onConfirm={() => { deleteBankAccount(deleteTarget.id); showToast('success', 'Deleted'); setDeleteTarget(null); }}
         />
@@ -110,28 +117,34 @@ function BankAccountDrawer({ clientId, record, onClose, onSaved }: {
   clientId: string; record: ClientBankAccount | null; onClose: () => void; onSaved: (isNew: boolean) => void;
 }) {
   const masterData = useMasterData();
+  const [name, setName] = useState(record?.name ?? '');
   const [bankId, setBankId] = useState(record?.bankId ?? masterData.banks[0]?.id ?? '');
-  const [accountHolder, setAccountHolder] = useState(record?.accountHolder ?? '');
-  const [accountNumber, setAccountNumber] = useState(record?.accountNumber ?? '');
+  const [holder, setHolder] = useState(record?.holder ?? '');
+  const [number, setNumber] = useState(record?.number ?? '');
   const [branch, setBranch] = useState(record?.branch ?? '');
+  const [primary, setPrimary] = useState(record?.primary ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   const handleSave = () => {
     const e: Record<string, string> = {};
     if (!bankId) e.bankId = 'Bank is required';
-    if (!accountHolder.trim()) e.accountHolder = 'Account holder is required';
-    if (!accountNumber.trim()) e.accountNumber = 'Account number is required';
-    else if (!/^\d+$/.test(accountNumber.trim())) e.accountNumber = 'Account number must be numeric';
+    if (!holder.trim()) e.holder = 'Holder is required';
+    if (!number.trim()) e.number = 'Account number is required';
+    else if (!/^\d+$/.test(number.trim())) e.number = 'Account number must be numeric';
     if (Object.keys(e).length) { setErrors(e); return; }
 
-    const data: BankAccountFormInput = { bankId, accountHolder: accountHolder.trim(), accountNumber: accountNumber.trim(), branch: branch.trim() };
+    const data: BankAccountFormInput = { name: name.trim(), bankId, holder: holder.trim(), number: number.trim(), branch: branch.trim(), primary };
     setSaving(true);
     setTimeout(() => { upsertBankAccount(clientId, data, record?.id); setSaving(false); onSaved(!record); }, 300);
   };
 
   return (
     <FormDrawer title={record ? 'Edit Bank Account' : 'Add Bank Account'} onClose={onClose} onSave={handleSave} saving={saving}>
+      <div>
+        <label style={labelStyle}>Name</label>
+        <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
+      </div>
       <div>
         <label style={labelStyle}>Bank <span style={{ color: '#EF4444' }}>*</span></label>
         <select value={bankId} onChange={e => setBankId(e.target.value)} style={{ ...selectStyle, borderColor: errors.bankId ? '#EF4444' : 'var(--color-border)' }}>
@@ -140,19 +153,20 @@ function BankAccountDrawer({ clientId, record, onClose, onSaved }: {
         {errors.bankId && <div style={errorTextStyle}>{errors.bankId}</div>}
       </div>
       <div>
-        <label style={labelStyle}>Account Holder <span style={{ color: '#EF4444' }}>*</span></label>
-        <input value={accountHolder} onChange={e => { setAccountHolder(e.target.value); if (errors.accountHolder) setErrors(x => ({ ...x, accountHolder: '' })); }} style={{ ...inputStyle, borderColor: errors.accountHolder ? '#EF4444' : 'var(--color-border)' }} />
-        {errors.accountHolder && <div style={errorTextStyle}>{errors.accountHolder}</div>}
+        <label style={labelStyle}>Holder <span style={{ color: '#EF4444' }}>*</span></label>
+        <input value={holder} onChange={e => { setHolder(e.target.value); if (errors.holder) setErrors(x => ({ ...x, holder: '' })); }} style={{ ...inputStyle, borderColor: errors.holder ? '#EF4444' : 'var(--color-border)' }} />
+        {errors.holder && <div style={errorTextStyle}>{errors.holder}</div>}
       </div>
       <div>
         <label style={labelStyle}>Account Number <span style={{ color: '#EF4444' }}>*</span></label>
-        <input value={accountNumber} onChange={e => { setAccountNumber(e.target.value); if (errors.accountNumber) setErrors(x => ({ ...x, accountNumber: '' })); }} style={{ ...inputStyle, borderColor: errors.accountNumber ? '#EF4444' : 'var(--color-border)' }} />
-        {errors.accountNumber && <div style={errorTextStyle}>{errors.accountNumber}</div>}
+        <input value={number} onChange={e => { setNumber(e.target.value); if (errors.number) setErrors(x => ({ ...x, number: '' })); }} style={{ ...inputStyle, borderColor: errors.number ? '#EF4444' : 'var(--color-border)' }} />
+        {errors.number && <div style={errorTextStyle}>{errors.number}</div>}
       </div>
       <div>
         <label style={labelStyle}>Branch</label>
         <input value={branch} onChange={e => setBranch(e.target.value)} style={inputStyle} />
       </div>
+      <Switch checked={primary} onChange={setPrimary} label="Primary" helperText="Turning this on unsets any other primary bank account for this client." />
     </FormDrawer>
   );
 }

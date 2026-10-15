@@ -2,7 +2,7 @@ import {
   LayoutGrid, DollarSign, Database, ShieldCheck,
   Boxes, ClipboardCheck, FlaskConical, Handshake, Server,
   MapPin, Building2, MonitorPlay, BarChart2, Image as ImageIcon,
-  Package, Tag, Grid3x3, Award, Clock, CalendarClock,
+  Package, Grid3x3, Award, Clock, CalendarClock,
   Factory, Landmark, Contact,
 } from 'lucide-react';
 
@@ -144,6 +144,13 @@ export const coreMenus: Record<CoreId, MenuItem[]> = {
 
   'core-4': [
     {
+      name: 'Sales',
+      icon: DollarSign,
+      subItems: [
+        { name: 'Quotation', path: '/core-4/quotation' },
+      ],
+    },
+    {
       name: 'Master',
       icon: Database,
       subItems: [
@@ -153,7 +160,6 @@ export const coreMenus: Record<CoreId, MenuItem[]> = {
         { name: 'Industry',                path: '/core-4/master/industry',                icon: Factory       },
         { name: 'Bank',                    path: '/core-4/master/bank',                    icon: Landmark      },
         { name: 'Client Profile',          path: '/core-4/master/client-profile',          icon: Contact       },
-        { name: 'Price',                   path: '/core-4/master/price',                   icon: Tag           },
         { name: 'Price Matrix',            path: '/core-4/master/price-matrix',            icon: Grid3x3       },
         { name: 'Brand',                   path: '/core-4/master/brand',                   icon: Award         },
         { name: 'City',                    path: '/core-4/master/city',                    icon: MapPin        },

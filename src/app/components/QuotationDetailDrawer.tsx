@@ -17,7 +17,7 @@ interface Props {
   onEdit: (q: Quotation) => void;
   onSend: (q: Quotation) => void;
   onConvert: (q: Quotation) => void;
-  onMarkLost: (q: Quotation) => void;
+  onSign: (q: Quotation) => void;
   onDuplicate: (q: Quotation) => void;
 }
 
@@ -61,7 +61,7 @@ function QStatusBadge({ status }: { status:QuotationStatus }) {
   const s = STATUS_CONFIG[status];
   return (
     <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:'999px', backgroundColor:s.bg, border:s.border||'none' }}>
-      {status!=='draft'&&<span style={{ width:7, height:7, borderRadius:'50%', backgroundColor:s.color, flexShrink:0 }}/>}
+      <span style={{ width:7, height:7, borderRadius:'50%', backgroundColor:s.color, flexShrink:0 }}/>
       <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:700, color:s.color }}>{s.label}</span>
     </span>
   );
@@ -107,7 +107,6 @@ function TabOverview({ quo }: { quo:Quotation }) {
           }/>
           <InfoRow label="Valid Until" value={<span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:expiry.color, display:'flex', alignItems:'center', gap:5 }}>{expiry.urgent&&<AlertTriangle size={12}/>}{expiry.text}</span>}/>
           <InfoRow label="Created"    value={quo.createdDate}/>
-          {quo.lostReason&&<InfoRow label="Lost Reason" value={<span style={{color:'#EF4444',fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)'}}>{quo.lostReason}</span>}/>}
           <InfoRow label="Tags" value={
             quo.tags.length>0
               ? <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>{quo.tags.map(t=><QTagBadge key={t.label} tag={t}/>)}</div>
@@ -125,7 +124,7 @@ function TabOverview({ quo }: { quo:Quotation }) {
         <div style={{ padding:'14px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <FileText size={14} style={{color:'var(--color-muted-foreground)'}}/>
-            <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{quo.quoNo}.pdf (1.2 MB)</span>
+            <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{quo.quotationNumber}.pdf (1.2 MB)</span>
             <button style={{ marginLeft:'auto', padding:'4px 10px', borderRadius:'var(--radius-sm)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'12px', cursor:'pointer' }}>Download</button>
           </div>
         </div>
@@ -145,7 +144,7 @@ function TabProducts({ quo }: { quo:Quotation }) {
           <table style={{ width:'100%', borderCollapse:'collapse', minWidth:700 }}>
             <thead>
               <tr>
-                {['Product','Qty','Duration','City','Rate','Final Price','Period','Subtotal'].map(h=>(
+                {['Product','Qty','Duration','City','Rate','Final Price','Start Date','Subtotal'].map(h=>(
                   <th key={h} style={{ padding:'9px 12px', fontFamily:'var(--font-family-geist)', fontSize:'11px', fontWeight:700, color:'var(--color-muted-foreground)', textTransform:'uppercase', letterSpacing:'0.05em', textAlign:'left', borderBottom:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -169,7 +168,7 @@ function TabProducts({ quo }: { quo:Quotation }) {
                       <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{formatIDR(p.finalPrice)}</div>
                       {discPct>0&&<div style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'#F59E0B' }}>-{discPct}%</div>}
                     </td>
-                    <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)', whiteSpace:'nowrap' }}>{p.campaignStart} – {p.campaignEnd}</td>
+                    <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)', whiteSpace:'nowrap' }}>{p.startDate || '—'}</td>
                     <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:700, color:'#10B981', whiteSpace:'nowrap' }}>{formatIDR(subtotal)}</td>
                   </tr>
                 );
@@ -210,9 +209,9 @@ function TabProducts({ quo }: { quo:Quotation }) {
               {quo.paymentTerms.map((pt,i)=>(
                 <tr key={pt.id} style={{ backgroundColor:i%2===0?'transparent':'rgba(0,0,0,0.015)' }}>
                   <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, color:'var(--color-foreground)' }}>{pt.name||`Term ${i+1}`}</td>
-                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.percentage}%</td>
-                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.milestone}</td>
-                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.dueDays} days</td>
+                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.percent}%</td>
+                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.masQuotationTermMoment_id}</td>
+                  <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{pt.masQuotationTermDue_id} days</td>
                   <td style={{ padding:'10px 12px', borderBottom:'1px solid var(--color-border)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:700, color:'#10B981' }}>{formatIDR(pt.amount)}</td>
                 </tr>
               ))}
@@ -290,13 +289,13 @@ function TabActivity() {
 
 // ── Main Drawer ────────────────────────────────────────────────────────────────
 
-export function QuotationDetailDrawer({ open, quo, onClose, onEdit, onSend, onConvert, onMarkLost, onDuplicate }: Props) {
+export function QuotationDetailDrawer({ open, quo, onClose, onEdit, onSend, onConvert, onSign, onDuplicate }: Props) {
   const [activeTab, setActiveTab] = useState('overview');
   const [copied, setCopied] = useState(false);
 
   const copyQuo = () => {
     if (!quo) return;
-    copyToClipboard(quo.quoNo);
+    copyToClipboard(quo.quotationNumber);
     setCopied(true); setTimeout(()=>setCopied(false),1500);
   };
 
@@ -331,12 +330,12 @@ export function QuotationDetailDrawer({ open, quo, onClose, onEdit, onSend, onCo
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:14 }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
-                    <span style={{ fontFamily:'monospace', fontSize:'18px', fontWeight:700, color:'var(--color-foreground)' }}>{quo.quoNo}</span>
+                    <span style={{ fontFamily:'monospace', fontSize:'18px', fontWeight:700, color:'var(--color-foreground)' }}>{quo.quotationNumber}</span>
                     <button onClick={copyQuo} style={{ padding:4, border:'none', background:'none', cursor:'pointer', color:'var(--color-muted-foreground)' }}>
                       {copied?<Check size={13} style={{color:'#10B981'}}/>:<Copy size={13}/>}
                     </button>
                     {sc&&<span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:'999px', backgroundColor:sc.bg, border:sc.border||'none' }}>
-                      {quo.status!=='draft'&&<span style={{ width:6, height:6, borderRadius:'50%', backgroundColor:sc.color }}/>}
+                      <span style={{ width:6, height:6, borderRadius:'50%', backgroundColor:sc.color }}/>
                       <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', fontWeight:700, color:sc.color }}>{sc.label}</span>
                     </span>}
                   </div>
@@ -344,9 +343,11 @@ export function QuotationDetailDrawer({ open, quo, onClose, onEdit, onSend, onCo
                   <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'12px', color:'var(--color-muted-foreground)' }}>Created on {quo.createdDate} by {quo.salesPerson.name}</div>
                 </div>
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                  <button onClick={()=>onEdit(quo)} style={{ padding:'7px 12px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'13px', fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                    <Edit size={13}/> Edit
-                  </button>
+                  {(quo.status==='lead'||quo.status==='filled')&&(
+                    <button onClick={()=>onEdit(quo)} style={{ padding:'7px 12px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'13px', fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                      <Edit size={13}/> Edit
+                    </button>
+                  )}
                   <button onClick={()=>onSend(quo)} style={{ padding:'7px 12px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'13px', fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                     <Send size={13}/> Send
                   </button>
@@ -398,14 +399,14 @@ export function QuotationDetailDrawer({ open, quo, onClose, onEdit, onSend, onCo
               <button style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'var(--color-secondary)', color:'var(--color-foreground)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
                 <Download size={13}/> Download PDF
               </button>
-              {quo.status==='lead'&&(
-                <button onClick={()=>onConvert(quo)} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#10B981', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
-                  <CheckCircle size={13}/> Convert to Sales Order
+              {quo.status==='filled'&&(
+                <button onClick={()=>onSign(quo)} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#7C3AED', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                  <CheckCircle size={13}/> Sign Quotation
                 </button>
               )}
-              {(quo.status==='lead'||quo.status==='draft')&&(
-                <button onClick={()=>onMarkLost(quo)} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'none', backgroundColor:'rgba(239,68,68,0.1)', color:'#EF4444', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer' }}>
-                  Mark as Lost
+              {quo.status==='signed'&&(
+                <button onClick={()=>onConvert(quo)} style={{ padding:'8px 14px', borderRadius:'var(--radius)', border:'none', backgroundColor:'#10B981', color:'white', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:5 }}>
+                  <CheckCircle size={13}/> Convert to Sales Order
                 </button>
               )}
             </div>
