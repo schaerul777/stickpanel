@@ -19,6 +19,14 @@ interface Props {
   onClose: () => void;
 }
 
+export interface InitialQuotationData {
+  clientId: string;
+  clientName: string;
+  quoteName: string;
+  salesPerson: { id: string; name: string; initials: string };
+  includeTax: boolean;
+}
+
 // Defined inline — no import dependency at module scope to avoid TDZ issues
 const TAG_COLOR = '#7C3AED';
 const TAG_BG    = 'rgba(124,58,237,0.1)';
@@ -34,15 +42,6 @@ const ALL_TAGS: QuotationTag[] = [
 
 const DUE_DAYS_OPTIONS = [0, 3, 7, 14, 21, 30, 45, 60, 90];
 const VAT_RATE = 0.11;
-
-const PAYMENT_DESCRIPTION_OPTIONS = [
-  'Initial Payment',
-  'Down Payment',
-  'Progress Payment',
-  'Completion Payment',
-  'Final Payment',
-  'Full Payment',
-];
 
 const UNIT_OPTIONS = ['spots', 'items', 'units'];
 
@@ -327,14 +326,6 @@ function ProductRow({ item, idx, onChange, onRemove, onDuplicate, grandTotal }:{
             {formatIDR(subtotal)}
           </div>
         </div>
-
-        {/* Notes */}
-        <div style={{ gridColumn:'1 / -1' }}>
-          <label style={labelStyle}>Notes</label>
-          <input type="text" value={item.notes} onChange={e=>setField('notes',e.target.value)}
-            placeholder="Special instructions or remarks for this item..."
-            style={{...inputStyle}}/>
-        </div>
       </div>
     </div>
   );
@@ -349,6 +340,7 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
 }) {
   const amount = Math.round(grandTotal * (term.percent/100));
   const setField = (field:string, val:any) => onChange(term.id, field, val);
+  const hideDue = term.masQuotationTermMoment_id === 'Before Installation';
   return (
     <div style={{ border:'1px solid var(--color-border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:10 }}>
       <div style={{ padding:'9px 14px', backgroundColor:'var(--color-secondary)', borderBottom:'1px solid var(--color-border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -357,12 +349,11 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
           <Trash2 size={11}/> Remove
         </button>
       </div>
-      <div style={{ padding:'14px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', gap:10 }}>
-        <div style={{ gridColumn:'1 / 3' }}>
-          <label style={labelStyle}>Description</label>
-          <StyledSelect value={term.name} onChange={e=>setField('name',e.target.value)}>
-            <option value="">Select a description...</option>
-            {PAYMENT_DESCRIPTION_OPTIONS.map(d=><option key={d} value={d}>{d}</option>)}
+      <div style={{ padding:'14px', display:'grid', gridTemplateColumns: hideDue ? '1fr 1fr' : '1fr 1fr 1fr', gap:10 }}>
+        <div style={{ gridColumn:'1 / -1' }}>
+          <label style={labelStyle}>Milestone <span style={{color:'#EF4444'}}>*</span></label>
+          <StyledSelect value={term.masQuotationTermMoment_id} onChange={e=>setField('masQuotationTermMoment_id',e.target.value)}>
+            {MILESTONE_OPTIONS.map(m=><option key={m} value={m}>{m}</option>)}
           </StyledSelect>
         </div>
         <div>
@@ -372,23 +363,141 @@ function PaymentTermRow({ term, idx, grandTotal, onChange, onRemove }:{
             <span style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-muted-foreground)' }}>%</span>
           </div>
         </div>
-        <div>
-          <label style={labelStyle}>Due Days</label>
-          <StyledSelect value={term.masQuotationTermDue_id} onChange={e=>setField('masQuotationTermDue_id',e.target.value)}>
-            {DUE_DAYS_OPTIONS.map(d=><option key={d} value={d}>{d} days</option>)}
-          </StyledSelect>
-        </div>
+        {!hideDue && (
+          <div>
+            <label style={labelStyle}>Due Days</label>
+            <StyledSelect value={term.masQuotationTermDue_id} onChange={e=>setField('masQuotationTermDue_id',e.target.value)}>
+              {DUE_DAYS_OPTIONS.map(d=><option key={d} value={d}>{d} days</option>)}
+            </StyledSelect>
+          </div>
+        )}
         <div>
           <label style={labelStyle}>Amount</label>
           <div style={{ padding:'9px 12px', borderRadius:'var(--radius)', border:'1px solid var(--color-border)', backgroundColor:'rgba(16,185,129,0.05)', fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', fontWeight:700, color:'#10B981' }}>
             {formatIDR(amount)}
           </div>
         </div>
-        <div style={{ gridColumn:'1 / -1' }}>
-          <label style={labelStyle}>Milestone <span style={{color:'#EF4444'}}>*</span></label>
-          <StyledSelect value={term.masQuotationTermMoment_id} onChange={e=>setField('masQuotationTermMoment_id',e.target.value)}>
-            {MILESTONE_OPTIONS.map(m=><option key={m} value={m}>{m}</option>)}
-          </StyledSelect>
+      </div>
+    </div>
+  );
+}
+
+// ── Initial Quotation Modal (Step 1) ─────────────────────────────────────────
+
+export function InitialQuotationModal({ onCreateInitial, onClose }: {
+  onCreateInitial: (data: InitialQuotationData) => void;
+  onClose: () => void;
+}) {
+  const { activeCompanyId } = useClientProfileUI();
+  useClientProfileData();
+  const clientsForCompany = getClientsForCompany(activeCompanyId);
+
+  const [clientId, setClientId] = useState('');
+  const [quoteName, setQuoteName] = useState('');
+  const [salesPersonId, setSalesPersonId] = useState(SALES_PERSONS_LIST[0].id);
+  const [includeTax, setIncludeTax] = useState(true);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const selectedSales = SALES_PERSONS_LIST.find(s => s.id === salesPersonId) || SALES_PERSONS_LIST[0];
+
+  const handleCreate = () => {
+    const errs: string[] = [];
+    if (!clientId) errs.push('Client is required');
+    if (!quoteName.trim()) errs.push('Quotation name is required');
+    if (errs.length) { setErrors(errs); return; }
+
+    const client = clientsForCompany.find(c => c.id === clientId);
+    onCreateInitial({
+      clientId,
+      clientName: client?.name || '',
+      quoteName: quoteName.trim(),
+      salesPerson: selectedSales,
+      includeTax,
+    });
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)' }} />
+      <div style={{ position: 'relative', width: 480, backgroundColor: 'var(--color-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-16)', fontWeight: 700, color: 'var(--color-foreground)' }}>Create Quotation</div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-muted-foreground)' }}>
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {errors.length > 0 && (
+            <div style={{ padding: '10px 14px', borderRadius: 'var(--radius)', border: '1px solid rgba(239,68,68,0.3)', backgroundColor: 'rgba(239,68,68,0.06)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <AlertTriangle size={14} style={{ color: '#EF4444', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                {errors.map(e => <div key={e} style={{ fontFamily: 'var(--font-family-geist)', fontSize: '12px', color: '#EF4444' }}>{e}</div>)}
+              </div>
+            </div>
+          )}
+
+          {/* Client */}
+          <div>
+            <label style={labelStyle}>Client <span style={{ color: '#EF4444' }}>*</span></label>
+            <StyledSelect value={clientId} onChange={e => setClientId(e.target.value)}>
+              <option value="">Select a client...</option>
+              {clientsForCompany.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </StyledSelect>
+          </div>
+
+          {/* Quotation Name */}
+          <div>
+            <label style={labelStyle}>Quotation Name <span style={{ color: '#EF4444' }}>*</span></label>
+            <input type="text" value={quoteName} onChange={e => setQuoteName(e.target.value)}
+              placeholder="e.g., Q1 2025 Jakarta Campaign"
+              style={inputStyle} />
+          </div>
+
+          {/* Sales Person */}
+          <div>
+            <label style={labelStyle}>Sales Person <span style={{ color: '#EF4444' }}>*</span></label>
+            <StyledSelect value={salesPersonId} onChange={e => setSalesPersonId(e.target.value)}>
+              {SALES_PERSONS_LIST.map(s => <option key={s.id} value={s.id}>{s.name} ({s.initials})</option>)}
+            </StyledSelect>
+          </div>
+
+          {/* Include Tax toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+            <div>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Include Tax (VAT 11%)</label>
+              <div style={{ fontFamily: 'var(--font-family-geist)', fontSize: '11px', color: 'var(--color-muted-foreground)', marginTop: 2 }}>
+                {includeTax ? 'VAT will be added to the total' : 'VAT excluded from total'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIncludeTax(v => !v)}
+              style={{
+                width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                backgroundColor: includeTax ? '#7C3AED' : 'var(--color-border)',
+                position: 'relative', transition: 'background-color 0.2s', flexShrink: 0,
+              }}
+            >
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', backgroundColor: 'white',
+                position: 'absolute', top: 3,
+                left: includeTax ? 23 : 3,
+                transition: 'left 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-secondary)', color: 'var(--color-foreground)', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 500, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleCreate} style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#7C3AED', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} /> Create
+          </button>
         </div>
       </div>
     </div>
@@ -424,6 +533,9 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   // Attachments
   const [attachments, setAttachments] = useState<QuotationAttachment[]>(quo?.attachments || []);
 
+  // Include Tax
+  const [includeTax, setIncludeTax] = useState(quo?.includeTax ?? true);
+
   // Terms text
   const [addNotes,   setAddNotes]   = useState(quo?.additionalNotes    || '');
   const [cancelPol,  setCancelPol]  = useState(quo?.cancellationPolicy || '');
@@ -443,7 +555,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   const subtotal = products.reduce((s,p)=>s + p.quantity*p.finalPrice*p.duration, 0);
   const discount = subtotalRate - subtotal;
   const totalAfterDiscount = subtotal;
-  const vat = Math.round(totalAfterDiscount * VAT_RATE);
+  const vat = includeTax ? Math.round(totalAfterDiscount * VAT_RATE) : 0;
   const grandTotal = totalAfterDiscount + vat;
 
   const ptTotal = paymentTerms.reduce((s,t)=>s+t.percent,0);
@@ -453,7 +565,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
   const updateProduct = useCallback((id:string, field:string, val:any) => {
     setProducts(p=>p.map(pr=>pr.id===id?{...pr,[field]:val}:pr));
   },[]);
-  const removeProduct = (id:string) => setProducts(p=>p.filter(pr=>pr.id!==id));
+  const removeProduct = (id:string) => setProducts(p => p.filter(pr => pr.id !== id));
   const duplicateProduct = (id:string) => {
     const orig = products.find(p=>p.id===id);
     if(orig) setProducts(p=>[...p,{...orig,id:`p${Date.now()}`}]);
@@ -537,6 +649,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
       additionalNotes: addNotes,
       cancellationPolicy: cancelPol,
       termsAndConditions: termsText,
+      includeTax,
     };
     setTimeout(()=>{ onSave(newQuo); setSaving(false); },400);
   };
@@ -711,6 +824,33 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                   <label style={labelStyle}>Tags</label>
                   <TagSelector selected={tags} onChange={setTags}/>
                 </div>
+
+                {/* Include Tax toggle */}
+                <div style={{ gridColumn:'1 / -1', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 0' }}>
+                  <div>
+                    <label style={{ ...labelStyle, marginBottom:0 }}>Include Tax (VAT 11%)</label>
+                    <div style={{ fontFamily:'var(--font-family-geist)', fontSize:'11px', color:'var(--color-muted-foreground)', marginTop:2 }}>
+                      {includeTax ? 'VAT will be added to the total' : 'VAT excluded from total'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIncludeTax(v => !v)}
+                    style={{
+                      width:44, height:24, borderRadius:12, border:'none', cursor:'pointer',
+                      backgroundColor: includeTax ? '#7C3AED' : 'var(--color-border)',
+                      position:'relative', transition:'background-color 0.2s', flexShrink:0,
+                    }}
+                  >
+                    <div style={{
+                      width:18, height:18, borderRadius:'50%', backgroundColor:'white',
+                      position:'absolute', top:3,
+                      left: includeTax ? 23 : 3,
+                      transition:'left 0.2s',
+                      boxShadow:'0 1px 3px rgba(0,0,0,0.15)',
+                    }} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -748,7 +888,7 @@ export function CreateEditQuotationModal({ quo, onSave, onClose }: Props) {
                     { label:'Subtotal',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-foreground)'}}>{formatIDR(subtotalRate)}</span>, editable:false },
                     { label:'Discount',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:discount>0?'#F59E0B':'var(--color-muted-foreground)'}}>{discount>0?`− ${formatIDR(discount)}`:'Rp 0'}</span>, editable:false },
                     { label:'Total After Discount', valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-foreground)'}}>{formatIDR(totalAfterDiscount)}</span>, editable:false },
-                    { label:'VAT (11%)',             valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-muted-foreground)'}}>{formatIDR(vat)}</span>, editable:false },
+                    { label: includeTax ? 'VAT (11%)' : 'VAT (excluded)', valueNode:<span style={{fontFamily:'var(--font-family-geist)',fontSize:'var(--text-14)',color:'var(--color-muted-foreground)'}}>{formatIDR(vat)}</span>, editable:false },
                   ].map(row=>(
                     <div key={row.label} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--color-border)' }}>
                       <span style={{ fontFamily:'var(--font-family-geist)', fontSize:'var(--text-14)', color:'var(--color-foreground)' }}>{row.label}</span>

@@ -49,6 +49,7 @@ export interface Quotation {
   paymentTerms: PaymentTerm[];
   attachments: QuotationAttachment[];
   additionalNotes: string; cancellationPolicy: string; termsAndConditions: string;
+  includeTax: boolean;
 }
 
 export interface QuotationAttachment {
@@ -150,6 +151,7 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
     additionalNotes: '<p>Campaign to be executed in premium locations across Jakarta and Bandung. Installation team will coordinate with venue management.</p>',
     cancellationPolicy: '<ul><li>Cancellation before campaign start: 100% refund</li><li>After campaign start: No refund</li><li>Early termination: Prorated refund minus 20% penalty</li></ul>',
     termsAndConditions: '<ol><li>Payment Terms: As per agreed schedule above</li><li>Campaign Execution: StickPoint executes per agreed timeline</li><li>Force Majeure: Delays due to unforeseen circumstances</li><li>Intellectual Property: Client owns campaign content</li><li>Dispute Resolution: Governed by Indonesian law</li></ol>',
+    includeTax: true,
   },
   {
     id: 'QUO-251802-002', quotationNumber: 'QUO-251802-002', quotationNumberRev: 'A',
@@ -169,6 +171,7 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
     ],
     paymentTerms: [{ id:'pt1', name:'Full Payment', percent:100, masQuotationTermMoment_id:'term-moment-1', masQuotationTermDue_id:'term-due-1', amount:127650000 }],
     attachments:[], additionalNotes:'', cancellationPolicy:'', termsAndConditions:'',
+    includeTax: true,
   },
   {
     id: 'QUO-251502-003', quotationNumber: 'QUO-251502-003', quotationNumberRev: 'A',
@@ -187,6 +190,7 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
       { id:'p1', product:'Mobile LED - Regular Slot 1-10 Days', category:'LED', quantity:100, unit:'spots', duration:4, durationUnit:'weeks', city:'Jakarta', ratePrice:2500000, finalPrice:2500000, startDate:'Feb 15, 2025', notes:'', description: 'Mobile LED advertising slot', discount: 0 },
     ],
     paymentTerms: [], attachments:[], additionalNotes:'', cancellationPolicy:'', termsAndConditions:'',
+    includeTax: true,
   },
   {
     id: 'QUO-251902-004', quotationNumber: 'QUO-251902-004', quotationNumberRev: 'A',
@@ -208,6 +212,7 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
       { id:'pt2', name:'Final Payment',   percent:50, masQuotationTermMoment_id:'term-moment-2', masQuotationTermDue_id:'term-due-2', amount:30525000 },
     ],
     attachments:[], additionalNotes:'', cancellationPolicy:'', termsAndConditions:'',
+    includeTax: true,
   },
   {
     id: 'QUO-252102-005', quotationNumber: 'QUO-252102-005', quotationNumberRev: 'A',
@@ -225,5 +230,6 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
       { id:'p1', product:'StickMob - Full-Back', category:'StickMob', quantity:60, unit:'spots', duration:2, durationUnit:'months', city:'Jakarta', ratePrice:8000000, finalPrice:8000000, startDate:'Mar 1, 2025', notes:'', description: 'Full-back vehicle wrap', discount: 0 },
     ],
     paymentTerms: [], attachments:[], additionalNotes:'', cancellationPolicy:'', termsAndConditions:'',
+    includeTax: true,
   },
 ];

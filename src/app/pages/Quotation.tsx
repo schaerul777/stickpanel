@@ -18,7 +18,9 @@ import {
 
 import { Checkbox } from '../components/Checkbox';
 import { QuotationDetailDrawer } from '../components/QuotationDetailDrawer';
-import { CreateEditQuotationModal } from '../components/CreateEditQuotationModal';
+import { CreateEditQuotationModal, InitialQuotationModal } from '../components/CreateEditQuotationModal';
+import type { InitialQuotationData } from '../components/CreateEditQuotationModal';
+import { useMasterData } from '../core/masterStore';
 import { useToast, ToastContainer } from '../components/Toast';
 import { ActiveCompanyBar } from '../components/master/ActiveCompanyBar';
 import { useClientProfileUI } from '../core/clientProfileUI';
@@ -665,13 +667,14 @@ function SendClientModal({ quo, onClose }: { quo: Quotation; onClose: () => void
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function genQuoNo(count: number): string {
+function genQuoNo(prefix: string, existingQuotations: Quotation[]): string {
   const now = new Date();
-  const yy  = String(now.getFullYear()).slice(-2);
-  const DD  = String(now.getDate()).padStart(2, '0');
-  const mm  = String(now.getMonth() + 1).padStart(2, '0');
-  const seq = String(count).padStart(3, '0');
-  return `QUO-${yy}${DD}${mm}-${seq}`;
+  const yy = String(now.getFullYear()).slice(-2);
+  const romanMonths = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+  const roman = romanMonths[now.getMonth()];
+  const companyQuos = existingQuotations.filter(q => q.quotationNumber.startsWith(prefix + '-'));
+  const seq = String(companyQuos.length + 1).padStart(4, '0');
+  return `${prefix}-${roman}-${yy}-${seq}`;
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
@@ -680,6 +683,8 @@ export function Quotation() {
   const [quotations,     setQuotations]     = useState<Quotation[]>(INITIAL_QUOTATIONS);
   const { toasts, showToast, dismiss }      = useToast();
   const { activeCompanyId }                 = useClientProfileUI();
+  const masterData                          = useMasterData();
+  const [showInitial,    setShowInitial]    = useState(false);
   const [search,         setSearch]         = useState('');
   const [activeTab,      setActiveTab]      = useState<QuotationStatus | 'all'>('all');
   const [filterOpen,     setFilterOpen]     = useState(false);
@@ -834,7 +839,9 @@ export function Quotation() {
     if (quo) showToast('success', 'Converted to Sales Order', `${quo.quotationNumber} has been converted successfully.`);
   };
   const handleDuplicate = (quo: Quotation) => {
-    const newNo = genQuoNo(quotations.length + 1);
+    const company = masterData.companies.find(c => c.id === activeCompanyId);
+    const prefix = company?.quotationPrefix || 'QUO';
+    const newNo = genQuoNo(prefix, quotations);
     const n: Quotation = {
       ...quo,
       id: newNo, quotationNumber: newNo, quotationNumberRev: 'A',
@@ -970,7 +977,7 @@ export function Quotation() {
               <Download size={15} /> Export List
             </button>
             <button
-              onClick={() => { setEditQuo(null); setShowCreate(true); }}
+              onClick={() => setShowInitial(true)}
               style={{ padding: '9px 16px', borderRadius: 'var(--radius)', border: 'none', backgroundColor: '#7C3AED', color: 'white', fontFamily: 'var(--font-family-geist)', fontSize: 'var(--text-14)', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px', transition: 'background-color 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#6D28D9'; }}
               onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#7C3AED'; }}
@@ -1609,6 +1616,52 @@ export function Quotation() {
         onSign={q => setSignQuo(q)}
         onDuplicate={handleDuplicate}
       />
+      {showInitial && (
+        <InitialQuotationModal
+          onCreateInitial={(data: InitialQuotationData) => {
+            const company = masterData.companies.find(c => c.id === activeCompanyId);
+            const prefix = company?.quotationPrefix || 'QUO';
+            const quoNo = genQuoNo(prefix, quotations);
+            const now = new Date();
+            const newQuo: Quotation = {
+              id: quoNo,
+              quotationNumber: quoNo,
+              quotationNumberRev: 'A',
+              masCompany_id: activeCompanyId,
+              setClientProfile_id: data.clientId,
+              setClientContact_id: '',
+              setClientBilling_id: '',
+              masBrand_id: '',
+              clientName: data.clientName,
+              clientBrand: '',
+              clientId: data.clientId,
+              contactPerson: '',
+              contactEmail: '',
+              quoteName: data.quoteName,
+              salesPerson: data.salesPerson,
+              status: 'lead',
+              tags: [],
+              subtotal: 0, discount: 0, totalAfterDiscount: 0, vat: 0, grandTotal: 0,
+              validUntil: '',
+              validUntilDate: now,
+              createdDate: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              createdDateObj: now,
+              image: null, appToDate: null, cancelledAt: null,
+              products: [],
+              paymentTerms: [],
+              attachments: [],
+              additionalNotes: '', cancellationPolicy: '', termsAndConditions: '',
+              includeTax: data.includeTax,
+            };
+            setQuotations(p => [newQuo, ...p]);
+            setShowInitial(false);
+            setEditQuo(newQuo);
+            setShowCreate(true);
+            showToast('success', 'Quotation Created', `${quoNo} has been created. Fill in the details.`);
+          }}
+          onClose={() => setShowInitial(false)}
+        />
+      )}
       {showCreate && (
         <CreateEditQuotationModal
           quo={editQuo}
