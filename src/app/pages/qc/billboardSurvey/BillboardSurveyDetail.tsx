@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   ArrowLeft, Lock, CheckCircle2, AlertTriangle, Pencil, History, MapPin, XCircle, Save, ChevronDown, Info,
-  CircleAlert, MoreHorizontal, ZoomIn, ZoomOut, RotateCcw, MoveRight, Clock3,
+  CircleAlert, MoreHorizontal, ZoomIn, ZoomOut, RotateCcw, MoveRight, Clock3, Plus, Trash2,
 } from 'lucide-react';
 import { useToast, ToastContainer } from '../../../components/Toast';
 import {
@@ -37,14 +37,16 @@ export function BillboardSurveyDetail() {
   const s = useSurveyState();
   const { toasts, showToast, dismiss } = useToast();
   const ad = getAd(s, adId);
+  const billboard = ad ? getBillboard(s, ad.billboardId) : undefined;
 
   return (
     <div style={{ fontFamily: FONT }}>
-      {ad ? (
+      {ad && billboard ? (
         <DetailBody key={`${adId}-${mode}`} adId={adId} mode={mode} city={city} showToast={showToast} />
       ) : (
         <div style={{ ...cardStyle, padding: '48px', textAlign: 'center' }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Ad not found</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>{ad ? 'Billboard record not found' : 'Ad not found'}</div>
+          <div style={{ fontSize: '13px', color: 'var(--muted-foreground)', marginBottom: '12px' }}>This item may have been removed or moved to another billboard.</div>
           <a href={BASE} style={{ color: PRIMARY, fontSize: '13px' }}>Back to Billboard Survey</a>
         </div>
       )}
@@ -70,13 +72,25 @@ function Card({ title, right, children, style }: { title: ReactNode; right?: Rea
 function Select<T extends string>({ value, options, onChange, disabled, placeholder }: { value: T; options: readonly T[]; onChange: (v: T) => void; disabled?: boolean; placeholder?: string }) {
   return (
     <div style={{ position: 'relative' }}>
-      <select value={value} disabled={disabled} onChange={e => onChange(e.target.value as T)} style={{ ...inputStyle, appearance: 'none', paddingRight: '28px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+      <select value={value} disabled={disabled} onChange={e => onChange(e.target.value as T)} style={{ ...inputStyle, appearance: 'none', paddingRight: '36px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
-      <ChevronDown size={13} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
+      <ChevronDown size={13} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
     </div>
   );
+}
+
+function DecisionSelect({ value, disabled, onChange, children, statusFocus = false, style, controlStyle }: {
+  value: string; disabled: boolean; onChange: (value: string) => void; children: ReactNode;
+  statusFocus?: boolean; style?: CSSProperties; controlStyle?: CSSProperties;
+}) {
+  return <div style={{ position: 'relative', minWidth: 0, ...style }}>
+    <select data-qc-status={statusFocus ? '' : undefined} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, ...controlStyle, width: '100%', appearance: 'none', paddingRight: '38px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .6 : 1 }}>
+      {children}
+    </select>
+    <ChevronDown size={14} style={{ position: 'absolute', right: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--muted-foreground)' }} />
+  </div>;
 }
 
 function DiffList({ diffs }: { diffs: FieldDiff[] }) {
@@ -235,7 +249,9 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
 
   // ── Derived form state ──
   const prevContent = compareAd?.result ?? null;
-  const brandMissing = content.status === 'Filled' && !content.brand;
+  const brandMissing = content.status === 'Filled' && (
+    !content.brand || (content.additionalBrands ?? []).some(item => !item.brand)
+  );
   const target = moveTo.trim() ? billboardByCode(moveTo) : undefined;
   const moveError = !moveTo.trim() ? null
     : !target ? 'No billboard registered with this code.'
@@ -256,6 +272,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
     ...c, status,
     brand: status === 'Filled' ? c.brand : '',
     subBrand: status === 'Filled' ? c.subBrand : '',
+    additionalBrands: status === 'Filled' ? c.additionalBrands : [],
     cp: status === 'Space available' ? c.cp : '',
   }));
 
@@ -573,7 +590,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
               <Prev>{prevContent?.brand}</Prev>
               <div>
                 <Select value={content.brand} options={brandOptions} disabled={readOnly || content.status !== 'Filled'} placeholder={content.status === 'Filled' ? 'Select brand' : '—'} onChange={v => setContent(c => ({ ...c, brand: v, subBrand: '' }))} />
-                {brandMissing && <div style={{ fontSize: '12px', color: RED, marginTop: '4px' }}>Brand is required when status is Filled.</div>}
+                {content.status === 'Filled' && !content.brand && <div style={{ fontSize: '12px', color: RED, marginTop: '4px' }}>Brand is required when status is Filled.</div>}
               </div>
 
               <RowLabel>Sub-brand</RowLabel>
@@ -583,6 +600,36 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
                 <datalist id="bs-subbrands">{subBrandOptions.map(o => <option key={o} value={o} />)}</datalist>
               </div>
 
+              {(content.additionalBrands ?? []).map((item, index) => {
+                const subBrands = BRANDS.find(b => b.name === item.brand)?.subBrands ?? [];
+                const previous = prevContent?.additionalBrands?.[index];
+                return <Fragment key={`additional-brand-${index}`}>
+                  <RowLabel>Brand {index + 2}</RowLabel>
+                  <Prev>{previous?.brand}</Prev>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <Select value={item.brand} options={brandOptions} disabled={readOnly || content.status !== 'Filled'} placeholder="Select brand" onChange={v => setContent(c => {
+                      const additional = [...(c.additionalBrands ?? [])]; additional[index] = { brand: v, subBrand: '' };
+                      return { ...c, additionalBrands: additional };
+                    })} />
+                    {mode === 'edit' && <Btn size="sm" disabled={readOnly} title="Remove brand" onClick={() => setContent(c => ({ ...c, additionalBrands: (c.additionalBrands ?? []).filter((_, i) => i !== index) }))}><Trash2 size={13} /></Btn>}
+                  </div>
+                  {content.status === 'Filled' && !item.brand && <div style={{ fontSize: '11px', color: RED, marginTop: '4px' }}>Select a brand or remove this row.</div>}
+                  <RowLabel>Sub-brand {index + 2}</RowLabel>
+                  <Prev>{previous?.subBrand}</Prev>
+                  <Select value={item.subBrand} options={subBrands} disabled={readOnly || content.status !== 'Filled' || !item.brand || subBrands.length === 0} placeholder={item.brand ? 'Optional' : 'Select a brand first'} onChange={v => setContent(c => {
+                    const additional = [...(c.additionalBrands ?? [])]; additional[index] = { ...additional[index], subBrand: v };
+                    return { ...c, additionalBrands: additional };
+                  })} />
+                  <RowLabel>Industry {index + 2}</RowLabel>
+                  <Prev>{previous?.brand ? industryOf(previous.brand) : ''}</Prev>
+                  <span style={{ color: item.brand ? 'var(--foreground)' : 'var(--muted-foreground)' }}>{industryOf(item.brand) || '—'} <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>(from brand)</span></span>
+                </Fragment>;
+              })}
+              {mode === 'edit' && content.status === 'Filled' && <>
+                <span /> <span />
+                <Btn size="sm" disabled={readOnly} style={{ width: '100%', margin: '8px 0 10px', border: `1px dashed ${PRIMARY_BORDER}`, background: PRIMARY_TINT, color: PRIMARY }} onClick={() => setContent(c => ({ ...c, additionalBrands: [...(c.additionalBrands ?? []), { brand: '', subBrand: '' }] }))}><Plus size={13} /> Add another brand</Btn>
+              </>}
+
               {showCp && <>
                 <RowLabel>CP number</RowLabel>
                 <Prev mono>{prevContent?.cp}</Prev>
@@ -590,8 +637,13 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
               </>}
 
               <RowLabel>Industry</RowLabel>
-              <Prev>{prevContent ? industryOf(prevContent.brand) : ''}</Prev>
+              <Prev>{prevContent?.brand ? industryOf(prevContent.brand) : ''}</Prev>
               <span style={{ color: content.brand ? 'var(--foreground)' : 'var(--muted-foreground)' }}>{industryOf(content.brand) || '—'} <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>(from brand)</span></span>
+              {(content.additionalBrands ?? []).map((item, index) => <Fragment key={`additional-industry-${index}`}>
+                <RowLabel>Industry {index + 2}</RowLabel>
+                <Prev>{prevContent?.additionalBrands?.[index]?.brand ? industryOf(prevContent.additionalBrands[index].brand) : ''}</Prev>
+                <span style={{ color: item.brand ? 'var(--foreground)' : 'var(--muted-foreground)' }}>{industryOf(item.brand) || '—'} <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>(from brand)</span></span>
+              </Fragment>)}
 
               <RowLabel>Ad copy</RowLabel>
               <Prev>{prevContent?.adCopy}</Prev>
@@ -795,11 +847,18 @@ function QcReviewLayout(p: QcReviewProps) {
     </div>
   );
 
-  const suggestionMeta = (value: string, confidence: string, source: 'Auto' | 'Surveyor' | 'QC' = 'Surveyor') => value ? (
+  const suggestionMeta = (value: string, source: 'Auto' | 'Surveyor' | 'QC' = 'Surveyor') => value ? (
     <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', marginTop: '5px', flexWrap: 'wrap' }}>
-      <Badge tone="green">{confidence}%</Badge><Badge>{source}</Badge>
+      <Badge>{source}</Badge>
     </span>
   ) : null;
+  const additionalBrands = content.additionalBrands ?? [];
+  const updateAdditionalBrand = (index: number, next: { brand: string; subBrand: string }) => setContent(c => {
+    const items = [...(c.additionalBrands ?? [])];
+    items[index] = next;
+    return { ...c, additionalBrands: items };
+  });
+  const removeAdditionalBrand = (index: number) => setContent(c => ({ ...c, additionalBrands: (c.additionalBrands ?? []).filter((_, i) => i !== index) }));
 
   return (
     <div className="qc-redesign" onClickCapture={onActivity} onKeyDownCapture={onActivity}>
@@ -934,28 +993,51 @@ function QcReviewLayout(p: QcReviewProps) {
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '9px', color: 'var(--muted-foreground)', margin: '0 0 3px' }}><span><kbd>1</kbd> Filled</span><span><kbd>2</kbd> Space Available</span><span><kbd>3</kbd> Empty</span><span><kbd>4</kbd> No longer exists</span></div>
             <DecisionField label="Status" shortcut="1–4" oldValue={prevContent?.status}>
-              <select data-qc-status value={content.status} disabled={readOnly} onChange={e => updateStatus(e.target.value)} style={{ ...inputStyle, height: '38px' }}>
-                {AD_STATUSES.map(status => <option key={status}>{status}</option>)}
-              </select>
-              {suggestionMeta(content.status, '91', content.status === ad.surveyor.input.status ? 'Surveyor' : 'QC')}
+              <DecisionSelect statusFocus value={content.status} disabled={readOnly} onChange={updateStatus}>{AD_STATUSES.map(status => <option key={status}>{status}</option>)}</DecisionSelect>
+              {suggestionMeta(content.status, content.status === ad.surveyor.input.status ? 'Surveyor' : 'QC')}
             </DecisionField>
             {content.status === 'No longer exists' ? <div style={{ borderBottom: '1px solid var(--border)', padding: '10px 0', fontSize: '12px', color: 'var(--muted-foreground)' }}><strong>Brand, sub-brand & ad copy</strong><div style={{ marginTop: '6px', color: 'var(--foreground)' }}>Not applicable</div></div> : <>
               <DecisionField label="Brand" oldValue={prevContent?.brand}>
-                <select value={content.brand} disabled={readOnly} onChange={e => changeField('brand', e.target.value)} style={inputStyle}>
+                <DecisionSelect value={content.brand} disabled={readOnly || content.status !== 'Filled'} onChange={value => setContent(c => ({ ...c, brand: value, subBrand: '' }))}>
                   <option value="">{content.status === 'Filled' ? 'Select brand' : '—'}</option>{brandOptions.map(b => <option key={b}>{b}</option>)}
-                </select>{suggestionMeta(content.brand, '87', content.brand === ad.surveyor.input.brand ? 'Surveyor' : 'QC')}
-                {brandMissing && <div style={{ color: RED, fontSize: '11px', marginTop: '4px' }}>Brand is required when status is Filled.</div>}
+                </DecisionSelect>{suggestionMeta(content.brand, content.brand === ad.surveyor.input.brand ? 'Surveyor' : 'QC')}
+                {content.status === 'Filled' && !content.brand && <div style={{ color: RED, fontSize: '11px', marginTop: '4px' }}>Brand is required when status is Filled.</div>}
               </DecisionField>
-              <DecisionField label="Sub-brand" oldValue={prevContent?.subBrand}>
-                <input list="qc-subbrands" value={content.subBrand} disabled={readOnly} onChange={e => changeField('subBrand', e.target.value)} placeholder="Optional" style={inputStyle} />
-                <datalist id="qc-subbrands">{subBrandOptions.map(b => <option key={b} value={b} />)}</datalist>{suggestionMeta(content.subBrand, '82', content.subBrand === ad.surveyor.input.subBrand ? 'Surveyor' : 'QC')}
+              <DecisionField label="Sub-brand" oldValue={prevContent?.subBrand} noBorder>
+                <DecisionSelect value={content.subBrand} disabled={readOnly || content.status !== 'Filled' || !content.brand} onChange={value => changeField('subBrand', value)}>
+                  <option value="">Optional</option>{subBrandOptions.map(b => <option key={b}>{b}</option>)}
+                </DecisionSelect>{suggestionMeta(content.subBrand, content.subBrand === ad.surveyor.input.subBrand ? 'Surveyor' : 'QC')}
               </DecisionField>
               <DecisionField label="Industry" oldValue={prevContent?.brand ? industryOf(prevContent.brand) : ''}>
                 <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center', fontSize: '12px' }}>{industryOf(content.brand) || '—'}</div>
               </DecisionField>
+              {additionalBrands.map((item, index) => {
+                const options = BRANDS.find(b => b.name === item.brand)?.subBrands ?? [];
+                const oldItem = prevContent?.additionalBrands?.[index];
+                return <div key={index} style={{ gridColumn: '1 / -1', margin: '10px 0', border: `1px solid ${!item.brand && brandMissing ? RED_BORDER : 'var(--border)'}`, borderRadius: 'var(--radius)', padding: '7px 8px', background: !item.brand && brandMissing ? RED_TINT : 'transparent' }}>
+                  <DecisionField label={`Brand ${index + 2}`} oldValue={oldItem?.brand}>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <DecisionSelect style={{ flex: 1 }} value={item.brand} disabled={readOnly || content.status !== 'Filled'} onChange={value => updateAdditionalBrand(index, { brand: value, subBrand: '' })}>
+                        <option value="">Select brand</option>{brandOptions.map(b => <option key={b}>{b}</option>)}
+                      </DecisionSelect>
+                      <button type="button" disabled={readOnly} onClick={() => removeAdditionalBrand(index)} aria-label={`Remove brand ${index + 2}`} title="Remove brand" style={{ width: '36px', height: '36px', flexShrink: 0, display: 'grid', placeItems: 'center', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: RED, background: 'var(--card)', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                    </div>
+                    {!item.brand && content.status === 'Filled' && <div style={{ fontSize: '10px', color: RED, marginTop: '3px' }}>Select a brand or remove this row.</div>}
+                  </DecisionField>
+                  <DecisionField label={`Sub-brand ${index + 2}`} oldValue={oldItem?.subBrand}>
+                    <DecisionSelect value={item.subBrand} disabled={readOnly || content.status !== 'Filled' || !item.brand || options.length === 0} onChange={value => updateAdditionalBrand(index, { ...item, subBrand: value })}>
+                      <option value="">{!item.brand ? 'Select a brand first' : options.length ? 'Optional' : 'No sub-brands'}</option>{options.map(b => <option key={b}>{b}</option>)}
+                    </DecisionSelect>
+                  </DecisionField>
+                  <DecisionField label={`Industry ${index + 2}`} oldValue={oldItem?.brand ? industryOf(oldItem.brand) : ''} noBorder>
+                    <div style={{ minHeight: '36px', display: 'flex', alignItems: 'center', fontSize: '12px' }}>{industryOf(item.brand) || '—'}</div>
+                  </DecisionField>
+                </div>;
+              })}
+              <button type="button" disabled={readOnly || content.status !== 'Filled'} onClick={() => setContent(c => ({ ...c, additionalBrands: [...(c.additionalBrands ?? []), { brand: '', subBrand: '' }] }))} style={{ width: '100%', minHeight: '36px', justifySelf: 'stretch', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '5px', gridColumn: '1 / -1', margin: '8px 0 12px', padding: '0 9px', border: `1px dashed ${PRIMARY_BORDER}`, borderRadius: 'var(--radius)', color: PRIMARY, background: PRIMARY_TINT, cursor: readOnly || content.status !== 'Filled' ? 'not-allowed' : 'pointer', font: `600 11px ${FONT}`, opacity: readOnly || content.status !== 'Filled' ? .5 : 1 }}><Plus size={13} /> Add another brand</button>
               <DecisionField label="Ad copy" oldValue={prevContent?.adCopy}>
                 <textarea value={content.adCopy} disabled={readOnly} onChange={e => changeField('adCopy', e.target.value)} placeholder="No text read from photo" style={{ ...inputStyle, height: '54px', padding: '7px 8px', resize: 'vertical' }} />
-                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)', marginTop: '3px' }}>OCR read-out</div>{suggestionMeta(content.adCopy, '94', content.adCopy === ad.surveyor.input.adCopy ? 'Surveyor' : 'QC')}
+                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)', marginTop: '3px' }}>OCR read-out</div>{suggestionMeta(content.adCopy, content.adCopy === ad.surveyor.input.adCopy ? 'Surveyor' : 'QC')}
               </DecisionField>
               {showCp && <DecisionField label="CP number" oldValue={prevContent?.cp}>
                 <input value={content.cp} disabled={readOnly || content.status !== 'Space available'} onChange={e => changeField('cp', e.target.value)} placeholder="08xx-xxxx-xxxx" style={{ ...inputStyle, fontFamily: 'monospace' }} />
@@ -972,10 +1054,10 @@ function QcReviewLayout(p: QcReviewProps) {
               </div> : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '9px 10px', marginTop: '10px' }}>
                 <CompactField label="Street name" missing={!attrs.street}><input value={attrs.street} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, street: e.target.value }))} style={missingStyle(!attrs.street)} /></CompactField>
                 <CompactField label="Media owner" missing={!attrs.mediaOwner}><input value={attrs.mediaOwner} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, mediaOwner: e.target.value }))} placeholder="Not filled" style={missingStyle(!attrs.mediaOwner)} /></CompactField>
-                <CompactField label="Media type" missing={!attrs.mediaType}><select value={attrs.mediaType} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, mediaType: e.target.value as PointAttrs['mediaType'] }))} style={missingStyle(!attrs.mediaType)}><option value="">Select</option><option>Conventional</option><option>LED</option></select></CompactField>
+                <CompactField label="Media type" missing={!attrs.mediaType}><DecisionSelect value={attrs.mediaType} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, mediaType: value as PointAttrs['mediaType'] }))} controlStyle={missingStyle(!attrs.mediaType)}><option value="">Select</option><option>Conventional</option><option>LED</option></DecisionSelect></CompactField>
                 <CompactField label="Size (W × H, m)" missing={!attrs.width || !attrs.height}><div style={{ display: 'flex', gap: '4px' }}><input type="number" value={attrs.width ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, width: e.target.value ? Number(e.target.value) : null }))} style={missingStyle(!attrs.width)} /><span>×</span><input type="number" value={attrs.height ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, height: e.target.value ? Number(e.target.value) : null }))} style={missingStyle(!attrs.height)} /></div></CompactField>
-                <CompactField label="Orientation" missing={!attrs.orientation}><select value={attrs.orientation} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, orientation: e.target.value as PointAttrs['orientation'] }))} style={missingStyle(!attrs.orientation)}><option value="">Select</option><option>Horizontal</option><option>Vertical</option></select></CompactField>
-                <CompactField label="Lighting" missing={!attrs.lighting}><select value={attrs.lighting} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, lighting: e.target.value as PointAttrs['lighting'] }))} style={missingStyle(!attrs.lighting)}><option value="">Select</option><option>Frontlit</option><option>Backlit</option><option>No lighting</option></select></CompactField>
+                <CompactField label="Orientation" missing={!attrs.orientation}><DecisionSelect value={attrs.orientation} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, orientation: value as PointAttrs['orientation'] }))} controlStyle={missingStyle(!attrs.orientation)}><option value="">Select</option><option>Horizontal</option><option>Vertical</option></DecisionSelect></CompactField>
+                <CompactField label="Lighting" missing={!attrs.lighting}><DecisionSelect value={attrs.lighting} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, lighting: value as PointAttrs['lighting'] }))} controlStyle={missingStyle(!attrs.lighting)}><option value="">Select</option><option>Frontlit</option><option>Backlit</option><option>No lighting</option></DecisionSelect></CompactField>
                 <CompactField label="Other billboards within 50 m" missing={false}><div style={{ minHeight: 36, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>{nearby.length}{nearby.slice(0, 3).map(n => <Badge key={n.id}>{n.code}</Badge>)}</div></CompactField>
               </div>}
             </div>
@@ -1007,8 +1089,8 @@ function QcReviewLayout(p: QcReviewProps) {
   );
 }
 
-function DecisionField({ label, shortcut, oldValue, children }: { label: string; shortcut?: string; oldValue?: string | null; children: ReactNode }) {
-  return <div className="qc-decision-field">
+function DecisionField({ label, shortcut, oldValue, children, noBorder = false }: { label: string; shortcut?: string; oldValue?: string | null; children: ReactNode; noBorder?: boolean }) {
+  return <div className="qc-decision-field" style={noBorder ? { borderBottom: 0 } : undefined}>
     <div><div style={{ fontSize: '11px', fontWeight: 650 }}>{label}{shortcut && <span style={{ color: PRIMARY, marginLeft: '4px' }}>{shortcut}</span>}</div><div style={{ fontSize: '10px', color: 'var(--muted-foreground)', marginTop: '5px', overflowWrap: 'anywhere' }}>{oldValue || '—'}</div></div>
     <div style={{ minWidth: 0, fontSize: '12px' }}>{children}</div>
   </div>;

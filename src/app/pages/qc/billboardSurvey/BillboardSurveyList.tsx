@@ -59,12 +59,6 @@ function ChangeCell({ row }: { row: QueueRow }) {
     if (content.status === 'Filled') return content.brand || 'Brand not filled';
     return content.status;
   };
-  const reviewNote = !row.auto.eligible || row.auto.pass ? null
-    : row.auto.reason?.includes('Status changed from Filled') ? 'Status changed; cannot pass automatically'
-    : row.auto.reason?.includes('CP number unreadable') ? 'Cannot pass automatically · CP number unreadable'
-    : row.auto.reason?.includes('CP number and media owner logo') ? 'Cannot pass automatically · CP number and media owner logo do not match'
-    : row.auto.reason;
-  const missingBrandNote = cur.status === 'Filled' && !cur.brand ? 'Filled, but brand is not specified' : null;
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -77,11 +71,6 @@ function ChangeCell({ row }: { row: QueueRow }) {
           {display(cur)}
         </span>
       </div>
-      {(reviewNote || missingBrandNote) && (
-        <div style={{ fontSize: '12px', color: RED, marginTop: '4px' }}>
-          {reviewNote ?? missingBrandNote}
-        </div>
-      )}
     </div>
   );
 }

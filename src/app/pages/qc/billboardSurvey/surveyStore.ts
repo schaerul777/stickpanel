@@ -74,7 +74,7 @@ export function changeKind(ad: SurveyAd, prev: SurveyAd | null): ChangeKind {
   const p = prev?.result;
   if (!p) return 'none';
   if (p.status !== cur.status) return 'status';
-  if (p.brand !== cur.brand) return 'brand';
+  if (p.brand !== cur.brand || JSON.stringify(p.additionalBrands ?? []) !== JSON.stringify(cur.additionalBrands ?? [])) return 'brand';
   return 'none';
 }
 

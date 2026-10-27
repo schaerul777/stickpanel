@@ -36,6 +36,7 @@ export interface AdContent {
   status: AdStatus;
   brand: string;
   subBrand: string;
+  additionalBrands?: { brand: string; subBrand: string }[];
   cp: string;
   adCopy: string;
 }
@@ -254,9 +255,12 @@ function offsetPoint(lat: number, lng: number, meters: number, bearing: number) 
 
 // ─── Content helpers ──────────────────────────────────────────────────────────
 
-export function contentSummary(c: Pick<AdContent, 'status' | 'brand'> | null) {
+export function contentSummary(c: Pick<AdContent, 'status' | 'brand' | 'additionalBrands'> | null) {
   if (!c) return '—';
-  return c.status === 'Filled' && c.brand ? `Filled · ${c.brand}` : c.status;
+  if (c.status !== 'Filled') return c.status;
+  const brands = [c.brand, ...(c.additionalBrands ?? []).map(item => item.brand)].filter(Boolean);
+  if (!brands.length) return 'Filled';
+  return `Filled · ${brands[0]}${brands.length > 1 ? ` +${brands.length - 1} brand${brands.length > 2 ? 's' : ''}` : ''}`;
 }
 
 export const CONTENT_FIELDS: { key: keyof AdContent; label: string }[] = [
@@ -282,9 +286,16 @@ function show(v: unknown) {
 }
 
 export function diffContent(a: AdContent, b: AdContent): FieldDiff[] {
-  return CONTENT_FIELDS
+  const diffs = CONTENT_FIELDS
     .filter(f => (a[f.key] ?? '') !== (b[f.key] ?? ''))
     .map(f => ({ field: f.label, from: show(a[f.key]), to: show(b[f.key]) }));
+  const formatAdditional = (items: AdContent['additionalBrands']) => (items ?? []).map((item, i) =>
+    `Brand ${i + 2}: ${show(item.brand)} · Sub-brand: ${show(item.subBrand)}`,
+  ).join('; ') || '(empty)';
+  if (formatAdditional(a.additionalBrands) !== formatAdditional(b.additionalBrands)) {
+    diffs.push({ field: 'Additional brands', from: formatAdditional(a.additionalBrands), to: formatAdditional(b.additionalBrands) });
+  }
+  return diffs;
 }
 
 export function diffAttrs(a: PointAttrs, b: PointAttrs): FieldDiff[] {
