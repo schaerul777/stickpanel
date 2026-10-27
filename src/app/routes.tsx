@@ -11,6 +11,8 @@ import { Clients } from './pages/Clients';
 import { GeolocationFilter } from './pages/GeolocationFilter';
 import { Cities } from './pages/Cities';
 import { CampaignReport } from './pages/CampaignReport';
+import { BillboardSurveyList } from './pages/qc/billboardSurvey/BillboardSurveyList';
+import { BillboardSurveyDetail } from './pages/qc/billboardSurvey/BillboardSurveyDetail';
 import { InventoryDisplay } from './pages/InventoryDisplay';
 import { CreateDisplay } from './pages/CreateDisplay';
 import { Deal } from './pages/Deal';
@@ -76,6 +78,8 @@ export const router = createBrowserRouter([
           { path: 'inventory/display',            Component: InventoryDisplay   },
           { path: 'inventory/display/new',        Component: CreateDisplay      },
           { path: 'qc/campaign-report',           Component: CampaignReport     },
+          { path: 'qc/billboard-survey',          Component: BillboardSurveyList   },
+          { path: 'qc/billboard-survey/:adId',    Component: BillboardSurveyDetail },
           { path: 'deal-testing/deal',            Component: Deal               },
           { path: 'deal-testing/dsp/advertiser',  Component: Advertiser         },
           { path: 'deal-testing/creatives',       Component: Creatives          },

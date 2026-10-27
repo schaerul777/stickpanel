@@ -3,7 +3,7 @@ import {
   Boxes, ClipboardCheck, FlaskConical, Handshake, Server,
   MapPin, Building2, MonitorPlay, BarChart2, Image as ImageIcon,
   Package, Grid3x3, Award, Clock, CalendarClock,
-  Factory, Landmark, Contact,
+  Factory, Landmark, Contact, ScanSearch,
 } from 'lucide-react';
 
 export type CoreId = 'core-2' | 'core-3' | 'core-4';
@@ -115,7 +115,8 @@ export const coreMenus: Record<CoreId, MenuItem[]> = {
       name: 'QC',
       icon: ClipboardCheck,
       subItems: [
-        { name: 'Campaign Report', path: '/core-3/qc/campaign-report', icon: BarChart2 },
+        { name: 'Campaign Report',  path: '/core-3/qc/campaign-report',  icon: BarChart2  },
+        { name: 'Billboard Survey', path: '/core-3/qc/billboard-survey', icon: ScanSearch },
       ],
     },
     {
