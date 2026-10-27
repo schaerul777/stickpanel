@@ -1,9 +1,15 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation } from 'react-router';
 import { Sidebar } from '../components/Sidebar';
 
 export function MainLayout() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const location = useLocation();
+  const isSurveyDetail = /^\/core-3\/qc\/billboard-survey\/[^/]+/.test(location.pathname);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isSurveyDetail);
+
+  useEffect(() => {
+    setIsSidebarCollapsed(isSurveyDetail);
+  }, [isSurveyDetail]);
 
   return (
     <div style={{ 
