@@ -13,6 +13,7 @@ export const AD_STATUSES: AdStatus[] = ['Filled', 'Empty', 'Space available', 'N
 export interface PointAttrs {
   street: string;
   mediaOwner: string;
+  cpContact: string;
   mediaType: MediaType | '';
   width: number | null;
   height: number | null;
@@ -274,6 +275,7 @@ export const CONTENT_FIELDS: { key: keyof AdContent; label: string }[] = [
 export const ATTR_FIELDS: { key: keyof PointAttrs; label: string }[] = [
   { key: 'street',      label: 'Street name' },
   { key: 'mediaOwner',  label: 'Media owner' },
+  { key: 'cpContact',   label: 'CP Contact' },
   { key: 'mediaType',   label: 'Media type' },
   { key: 'width',       label: 'Width (m)' },
   { key: 'height',      label: 'Height (m)' },
@@ -436,6 +438,7 @@ export function buildSeed(): SeedState {
       attrs: {
         street: `${street} No. ${Math.floor(1 + rng() * 120)}`,
         mediaOwner,
+        cpContact: cpOnFile ?? '',
         mediaType: isLed ? 'LED' : 'Conventional',
         width: partial ? null : [4, 5, 6, 8, 10][Math.floor(rng() * 5)],
         height: partial ? null : [3, 4, 5][Math.floor(rng() * 3)],

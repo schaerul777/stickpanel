@@ -199,14 +199,13 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
   const opened = useRef({
     version: ad.version,
     content: { ...(mode === 'qc' ? ad.surveyor.input : (ad.result ?? ad.surveyor.input)) } as AdContent,
-    attrs: { ...billboard.attrs } as PointAttrs,
+    attrs: { ...billboard.attrs, cpContact: billboard.attrs.cpContact ?? billboard.cpOnFile ?? '' } as PointAttrs,
   }).current;
 
   const [blocked, setBlocked] = useState<string | null>(null);
   const [content, setContent] = useState<AdContent>(opened.content);
   const [attrs, setAttrs] = useState<PointAttrs>(opened.attrs);
   const [moveTo, setMoveTo] = useState('');
-  const [reason, setReason] = useState('');
   const [overturn, setOverturn] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
@@ -265,7 +264,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
   }, [opened, content, attrs, overturn]);
 
   const nearby = s.billboards.filter(b => b.id !== billboard.id && distanceM(b.lat, b.lng, billboard.lat, billboard.lng) <= MAX_DRIFT_M);
-  const attrsFilled = [attrs.street, attrs.mediaOwner, attrs.mediaType, attrs.width && attrs.height ? 'size' : '', attrs.orientation, attrs.lighting, 'nearby']
+  const attrsFilled = [attrs.street, attrs.mediaOwner, attrs.cpContact, attrs.mediaType, attrs.width && attrs.height ? 'size' : '', attrs.orientation, attrs.lighting, 'nearby']
     .filter(Boolean).length;
 
   const setStatus = (status: AdStatus) => setContent(c => ({
@@ -308,7 +307,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
   };
 
   const handleSaveEdit = () => {
-    const res = saveEdit(adId, opened.version, { content, attrs, reason: reason.trim(), approve: overturn });
+    const res = saveEdit(adId, opened.version, { content, attrs, reason: '', approve: overturn });
     if (!res.ok) return setConflict(res);
     showToast('success', 'QC result updated', `${editDiffs.length} change${editDiffs.length === 1 ? '' : 's'} recorded.`);
     setParams({ mode: 'view' });
@@ -335,7 +334,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
   const lastEditAt = ad.changes.at(-1)?.at ?? ad.qc?.at ?? null;
 
   const qcSaveDisabled = readOnly || brandMissing || !!moveError;
-  const editSaveDisabled = readOnly || brandMissing || editDiffs.length === 0 || !reason.trim();
+  const editSaveDisabled = readOnly || brandMissing || editDiffs.length === 0;
 
   const brandOptions = BRANDS.map(b => b.name);
   const subBrandOptions = BRANDS.find(b => b.name === content.brand)?.subBrands ?? [];
@@ -355,7 +354,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
   }, [adId, mode, readOnly]);
 
   useEffect(() => {
-    setAttributesOpen(attrsFilled < 7);
+    setAttributesOpen(attrsFilled < 8);
   }, [attrsFilled]);
 
   useEffect(() => {
@@ -376,7 +375,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (mode === 'qc') return (
+  if (mode === 'qc' || mode === 'edit' || (mode === 'view' && ad.state !== 'pending')) return (
     <QcReviewLayout
       ad={ad} billboard={billboard} history={history} compareAd={compareAd} compareId={compareId}
       setCompareId={setCompareId} content={content} setContent={setContent} setStatus={setStatus}
@@ -386,9 +385,16 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
       claimMine={claimMine} claimLost={claimLost} claim={ad.claim} now={now} doneToday={s.doneToday}
       blocked={blocked} kind={kind} waiting={waiting} brandMissing={brandMissing} moveError={moveError}
       readOnly={readOnly} saving={saving} onSave={saveWithFeedback}
-      onPause={() => { releaseClaim(adId); goQueue(); }}
+      onPause={() => {
+        releaseClaim(adId);
+        if (mode === 'edit') setParams({ mode: 'view' });
+        else goQueue();
+      }}
       onLightbox={setLightbox} onMove={() => setMoveDialogOpen(true)} onReclaim={reclaim}
       onActivity={onActivity} showCp={showCp} onView={() => setParams({ mode: 'view' })}
+      viewOnly={mode === 'view'} editMode={mode === 'edit'} onEdit={startEdit}
+      overturn={overturn} setOverturn={setOverturn}
+      editDiffs={editDiffs} editSaveDisabled={editSaveDisabled} onSaveEdit={handleSaveEdit}
       corrections={corrections} billboards={s.billboards} moveDialogOpen={moveDialogOpen}
       setMoveDialogOpen={setMoveDialogOpen} onConfirmMove={setMoveTo} rejectDialogOpen={rejectOpen}
       setRejectDialogOpen={setRejectOpen} onConfirmReject={handleReject} conflict={conflict}
@@ -529,13 +535,16 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
             <KV k="QC edited" v={lastEditAt ? fmtDateTime(lastEditAt) : '—'} />
           </Card>
 
-          <Card title="Point attributes" right={<Badge tone={attrsFilled === 7 ? 'green' : 'neutral'}>{attrsFilled} of 7 filled</Badge>}>
+          <Card title="Point attributes" right={<Badge tone={attrsFilled === 8 ? 'green' : 'neutral'}>{attrsFilled} of 8 filled</Badge>}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <Field label="Street name" span>
                 <input value={attrs.street} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, street: e.target.value }))} style={inputStyle} />
               </Field>
               <Field label="Media owner">
                 <input value={attrs.mediaOwner} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, mediaOwner: e.target.value }))} placeholder="Not filled" style={inputStyle} />
+              </Field>
+              <Field label="CP Contact">
+                <input type="tel" value={attrs.cpContact} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, cpContact: e.target.value }))} placeholder="Not filled" style={inputStyle} />
               </Field>
               <Field label="Media type">
                 <Select value={attrs.mediaType} options={['Conventional', 'LED'] as const} disabled={readOnly} placeholder="Select" onChange={v => setAttrs(a => ({ ...a, mediaType: v }))} />
@@ -688,7 +697,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
                   {groupChanges(ad).map(g => (
                     <HistoryItem key={g.at} who={g.by} at={g.at}>
                       <DiffList diffs={g.items} />
-                      <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '4px' }}>Reason: {g.reason}</div>
+                      {g.reason && <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '4px' }}>Reason: {g.reason}</div>}
                     </HistoryItem>
                   ))}
                 </div>
@@ -704,13 +713,6 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
                   Overturn rejection and approve this ad
                 </label>
               )}
-              <Card title="Changes to be recorded" style={{ borderColor: editDiffs.length ? 'PRIMARY_BORDER' : undefined }}>
-                {editDiffs.length ? <DiffList diffs={editDiffs} /> : <div style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>No changes yet.</div>}
-              </Card>
-              <Card title={<>Reason for change <span style={{ color: RED }}>*</span></>}>
-                <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Why is this result being changed?" style={{ ...inputStyle, height: '72px', padding: '8px 10px', resize: 'vertical' }} />
-                {!reason.trim() && editDiffs.length > 0 && <div style={{ fontSize: '12px', color: RED, marginTop: '4px' }}>A reason is required to save.</div>}
-              </Card>
             </>
           )}
         </div>
@@ -720,7 +722,7 @@ function DetailBody({ adId, mode, city, showToast }: { adId: string; mode: Mode;
       <div style={{ position: 'sticky', bottom: 0, marginTop: '20px', padding: '12px 16px', ...cardStyle, boxShadow: '0 -4px 16px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', zIndex: 5 }}>
         <div style={{ fontSize: '12px', color: brandMissing || moveError ? RED : 'var(--muted-foreground)' }}>
           {mode === 'qc' && (brandMissing || moveError ? 'Resolve the fields marked in red before saving.' : 'Saving releases this ad and claims the next one in the queue.')}
-          {mode === 'edit' && (editDiffs.length === 0 ? 'Change at least one field to save.' : !reason.trim() ? 'Add a reason for the change.' : `${editDiffs.length} change${editDiffs.length === 1 ? '' : 's'} ready to record.`)}
+          {mode === 'edit' && (editDiffs.length === 0 ? 'Change at least one field to save.' : `${editDiffs.length} change${editDiffs.length === 1 ? '' : 's'} ready to record.`)}
           {mode === 'view' && (ad.state === 'pending' ? 'This ad has not been checked yet.' : 'Read-only. Edits are logged with a reason.')}
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -774,7 +776,9 @@ type QcReviewProps = {
   kind: ReturnType<typeof changeKind>; waiting: number; brandMissing: boolean; moveError: string | null;
   readOnly: boolean; saving: boolean; onSave: () => void; onPause: () => void;
   onLightbox: (v: { photo: SurveyPhoto; caption: string }) => void; onMove: () => void; onReclaim: () => void;
-  onActivity: () => void; showCp: boolean; onView: () => void;
+  onActivity: () => void; showCp: boolean; onView: () => void; viewOnly: boolean; editMode: boolean; onEdit: () => void;
+  overturn: boolean; setOverturn: (value: boolean) => void;
+  editDiffs: FieldDiff[]; editSaveDisabled: boolean; onSaveEdit: () => void;
   corrections: FieldDiff[];
   billboards: Billboard[]; moveDialogOpen: boolean; setMoveDialogOpen: (open: boolean) => void;
   onConfirmMove: (code: string) => void; rejectDialogOpen: boolean; setRejectDialogOpen: (open: boolean) => void;
@@ -788,7 +792,8 @@ function QcReviewLayout(p: QcReviewProps) {
     ad, billboard, history, compareAd, compareId, setCompareId, content, setContent, setStatus, prevContent,
     attrs, setAttrs, attrsFilled, attributesOpen, setAttributesOpen, nearby, curOffset, cmpOffset, betweenPhotos,
     lastEditAt, claimMine, claimLost, claim, now, doneToday, blocked, kind, waiting, brandMissing, moveError,
-    readOnly, saving, onSave, onPause, onLightbox, onMove, onReclaim, onActivity, showCp, onView,
+    readOnly, saving, onSave, onPause, onLightbox, onMove, onReclaim, onActivity, showCp, onView, viewOnly, editMode, onEdit,
+    overturn, setOverturn, editDiffs, editSaveDisabled, onSaveEdit,
     corrections, billboards, moveDialogOpen, setMoveDialogOpen, onConfirmMove, rejectDialogOpen, setRejectDialogOpen,
     onConfirmReject, conflict, onClearConflict, onBackQueue, onTakeNext, moveTo, moveTarget,
   } = p;
@@ -883,27 +888,30 @@ function QcReviewLayout(p: QcReviewProps) {
       <header style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'center', marginBottom: '12px' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>QC / Billboard Survey / {billboard.code}</div>
-          <button onClick={onPause} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center', padding: 0, border: 0, background: 'none', color: PRIMARY, font: `500 12px ${FONT}`, cursor: 'pointer', marginBottom: '5px' }}><ArrowLeft size={13} /> Pause & return to queue</button>
+          <button onClick={onPause} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center', padding: 0, border: 0, background: 'none', color: PRIMARY, font: `500 12px ${FONT}`, cursor: 'pointer', marginBottom: '5px' }}><ArrowLeft size={13} /> {viewOnly ? 'Back to Billboard Survey' : editMode ? 'Back to QC result' : 'Pause & return to queue'}</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '19px', fontWeight: 650, margin: 0, lineHeight: 1.25 }}>{billboard.attrs.street}</h1>
-            {kind === 'status' && <Badge tone="accent"><CircleAlert size={11} /> Status changed</Badge>}
-            {kind === 'brand' && <Badge tone="accent">Brand changed</Badge>}
-            {waiting > 0 && <Badge tone={waiting > 3 ? 'red' : 'neutral'}><Clock3 size={11} /> Waiting {waiting} day{waiting === 1 ? '' : 's'}</Badge>}
-            <Badge tone={content.status === 'No longer exists' ? 'amber' : 'neutral'}>{content.status}</Badge>
+            {viewOnly ? <Badge tone={ad.state === 'rejected' ? 'red' : 'green'}>{ad.state === 'rejected' ? <><XCircle size={11} /> Rejected</> : <><CheckCircle2 size={11} /> Verified</>}</Badge> : <>
+              {kind === 'status' && <Badge tone="accent"><CircleAlert size={11} /> Status changed</Badge>}
+              {kind === 'brand' && <Badge tone="accent">Brand changed</Badge>}
+              {waiting > 0 && <Badge tone={waiting > 3 ? 'red' : 'neutral'}><Clock3 size={11} /> Waiting {waiting} day{waiting === 1 ? '' : 's'}</Badge>}
+              <Badge tone={content.status === 'No longer exists' ? 'amber' : 'neutral'}>{content.status}</Badge>
+            </>}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '3px' }}><span style={{ fontFamily: 'monospace' }}>{billboard.code}</span> · {billboard.city} · {billboard.subdistrict} · {billboard.attrs.mediaType || '—'} · {monthLabel(ad.month)}</div>
         </div>
-        <div style={{ ...cardStyle, padding: '8px 10px', flex: '0 0 216px', background: !claimMine || remain < 120_000 ? RED_TINT : PRIMARY_TINT, borderColor: !claimMine || remain < 120_000 ? RED_BORDER : PRIMARY_BORDER }}>
+        {!viewOnly && <div style={{ ...cardStyle, padding: '8px 10px', flex: '0 0 216px', background: !claimMine || remain < 120_000 ? RED_TINT : PRIMARY_TINT, borderColor: !claimMine || remain < 120_000 ? RED_BORDER : PRIMARY_BORDER }}>
           <div style={{ display: 'flex', gap: '7px', alignItems: 'center', fontSize: '11px', color: !claimMine || remain < 120_000 ? RED : PRIMARY }}>
             <Lock size={13} />
             <div><strong>{claimMine ? 'Claimed for you' : 'Claim released'}</strong>{claimMine && <div>Auto-release in <strong style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtCountdown(remain)}</strong></div>}</div>
           </div>
           <div style={{ borderTop: `1px solid ${!claimMine || remain < 120_000 ? RED_BORDER : PRIMARY_BORDER}`, marginTop: '5px', paddingTop: '5px', fontSize: '11px', color: 'var(--muted-foreground)' }}>Completed today: <strong style={{ color: 'var(--foreground)' }}>{doneToday}</strong></div>
-        </div>
+        </div>}
       </header>
 
       {(blocked || claimLost) && <Banner tone="amber" icon={AlertTriangle}>{blocked ?? <>Your claim expired and this ad returned to the queue. Saving may conflict. <button onClick={onReclaim} style={linkBtn}>Reclaim</button></>}</Banner>}
       {blocked && ad.state !== 'pending' && <button onClick={onView} style={linkBtn}>Open read-only</button>}
+      {editMode && !blocked && <Banner tone="accent" icon={Pencil}><strong>Edit QC result</strong> · changes are logged with a reason.</Banner>}
 
       <div className="qc-two-col">
         <section className="qc-evidence">
@@ -985,13 +993,13 @@ function QcReviewLayout(p: QcReviewProps) {
           <div className="qc-decision-scroll" ref={scrollRef}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <h2 style={{ fontSize: '15px', margin: 0, fontWeight: 650 }}>Ad content</h2>
-              <Btn size="sm" disabled={!prevContent || readOnly} onClick={() => prevContent && setContent({ ...prevContent })}>Same as {monthShort(compareAd?.month ?? ad.month - 1)}</Btn>
+              {!viewOnly && <Btn size="sm" disabled={!prevContent || readOnly} onClick={() => prevContent && setContent({ ...prevContent })}>Same as {monthShort(compareAd?.month ?? ad.month - 1)}</Btn>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '8px', marginBottom: '8px' }}>
               <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--muted-foreground)' }}>{compareAd ? monthLabel(compareAd.month) : 'Previous month'} · Verified</div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: PRIMARY }}>{monthLabel(ad.month)} · Editable</div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: PRIMARY }}>{monthLabel(ad.month)} · {viewOnly ? 'QC result' : 'Editable'}</div>
             </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '9px', color: 'var(--muted-foreground)', margin: '0 0 3px' }}><span><kbd>1</kbd> Filled</span><span><kbd>2</kbd> Space Available</span><span><kbd>3</kbd> Empty</span><span><kbd>4</kbd> No longer exists</span></div>
+            {!viewOnly && <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '9px', color: 'var(--muted-foreground)', margin: '0 0 3px' }}><span><kbd>1</kbd> Filled</span><span><kbd>2</kbd> Space Available</span><span><kbd>3</kbd> Empty</span><span><kbd>4</kbd> No longer exists</span></div>}
             <DecisionField label="Status" shortcut="1–4" oldValue={prevContent?.status}>
               <DecisionSelect statusFocus value={content.status} disabled={readOnly} onChange={updateStatus}>{AD_STATUSES.map(status => <option key={status}>{status}</option>)}</DecisionSelect>
               {suggestionMeta(content.status, content.status === ad.surveyor.input.status ? 'Surveyor' : 'QC')}
@@ -1045,35 +1053,56 @@ function QcReviewLayout(p: QcReviewProps) {
             </>}
 
             <div style={{ marginTop: '12px', ...cardStyle, padding: '10px' }}>
-              <button onClick={() => setAttributesOpen(attrsFilled < 7 ? true : !attributesOpen)} aria-expanded={attributesOpen} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', border: 0, padding: 0, background: 'none', cursor: 'pointer', color: 'var(--foreground)', textAlign: 'left', fontFamily: FONT }}>
-                <span style={{ fontSize: '12px', fontWeight: 650 }}>Point attributes</span><span style={{ display: 'flex', gap: '7px', alignItems: 'center' }}><Badge tone={attrsFilled === 7 ? 'green' : 'red'}>{attrsFilled} of 7 filled</Badge><ChevronDown size={14} style={{ transform: attributesOpen ? 'rotate(180deg)' : undefined }} /></span>
+              <button onClick={() => setAttributesOpen(attrsFilled < 8 ? true : !attributesOpen)} aria-expanded={attributesOpen} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', border: 0, padding: 0, background: 'none', cursor: 'pointer', color: 'var(--foreground)', textAlign: 'left', fontFamily: FONT }}>
+                <span style={{ fontSize: '12px', fontWeight: 650 }}>Point attributes</span><span style={{ display: 'flex', gap: '7px', alignItems: 'center' }}><Badge tone="neutral">{attrsFilled} of 8 filled</Badge><ChevronDown size={14} style={{ transform: attributesOpen ? 'rotate(180deg)' : undefined }} /></span>
               </button>
               {!attributesOpen ? <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '7px' }}>
-                {[attrs.mediaType, attrs.width && attrs.height ? `${attrs.width} × ${attrs.height} m` : '', attrs.orientation, attrs.lighting, attrs.mediaOwner].filter(Boolean).join(' · ') || 'No attributes entered'}
-                <button onClick={() => setAttributesOpen(true)} style={{ ...linkBtn, marginLeft: '8px', fontSize: '11px' }}>Edit</button>
+                {[attrs.mediaType, attrs.width && attrs.height ? `${attrs.width} × ${attrs.height} m` : '', attrs.orientation, attrs.lighting, attrs.mediaOwner, attrs.cpContact].filter(Boolean).join(' · ') || 'No attributes entered'}
+                <button onClick={() => setAttributesOpen(true)} style={{ ...linkBtn, marginLeft: '8px', fontSize: '11px' }}>{readOnly ? 'View' : 'Edit'}</button>
               </div> : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '9px 10px', marginTop: '10px' }}>
-                <CompactField label="Street name" missing={!attrs.street}><input value={attrs.street} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, street: e.target.value }))} style={missingStyle(!attrs.street)} /></CompactField>
-                <CompactField label="Media owner" missing={!attrs.mediaOwner}><input value={attrs.mediaOwner} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, mediaOwner: e.target.value }))} placeholder="Not filled" style={missingStyle(!attrs.mediaOwner)} /></CompactField>
-                <CompactField label="Media type" missing={!attrs.mediaType}><DecisionSelect value={attrs.mediaType} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, mediaType: value as PointAttrs['mediaType'] }))} controlStyle={missingStyle(!attrs.mediaType)}><option value="">Select</option><option>Conventional</option><option>LED</option></DecisionSelect></CompactField>
-                <CompactField label="Size (W × H, m)" missing={!attrs.width || !attrs.height}><div style={{ display: 'flex', gap: '4px' }}><input type="number" value={attrs.width ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, width: e.target.value ? Number(e.target.value) : null }))} style={missingStyle(!attrs.width)} /><span>×</span><input type="number" value={attrs.height ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, height: e.target.value ? Number(e.target.value) : null }))} style={missingStyle(!attrs.height)} /></div></CompactField>
-                <CompactField label="Orientation" missing={!attrs.orientation}><DecisionSelect value={attrs.orientation} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, orientation: value as PointAttrs['orientation'] }))} controlStyle={missingStyle(!attrs.orientation)}><option value="">Select</option><option>Horizontal</option><option>Vertical</option></DecisionSelect></CompactField>
-                <CompactField label="Lighting" missing={!attrs.lighting}><DecisionSelect value={attrs.lighting} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, lighting: value as PointAttrs['lighting'] }))} controlStyle={missingStyle(!attrs.lighting)}><option value="">Select</option><option>Frontlit</option><option>Backlit</option><option>No lighting</option></DecisionSelect></CompactField>
+                <CompactField label="Street name"><input value={attrs.street} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, street: e.target.value }))} style={inputStyle} /></CompactField>
+                <CompactField label="Media owner"><input value={attrs.mediaOwner} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, mediaOwner: e.target.value }))} placeholder="Not filled" style={inputStyle} /></CompactField>
+                <CompactField label="CP Contact"><input type="tel" value={attrs.cpContact} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, cpContact: e.target.value }))} placeholder="Not filled" style={inputStyle} /></CompactField>
+                <CompactField label="Media type"><DecisionSelect value={attrs.mediaType} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, mediaType: value as PointAttrs['mediaType'] }))}><option value="">Select</option><option>Conventional</option><option>LED</option></DecisionSelect></CompactField>
+                <CompactField label="Size (W × H, m)"><div style={{ display: 'flex', gap: '4px' }}><input type="number" value={attrs.width ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, width: e.target.value ? Number(e.target.value) : null }))} style={{ ...inputStyle, minWidth: 0 }} /><span>×</span><input type="number" value={attrs.height ?? ''} disabled={readOnly} onChange={e => setAttrs(a => ({ ...a, height: e.target.value ? Number(e.target.value) : null }))} style={{ ...inputStyle, minWidth: 0 }} /></div></CompactField>
+                <CompactField label="Orientation"><DecisionSelect value={attrs.orientation} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, orientation: value as PointAttrs['orientation'] }))}><option value="">Select</option><option>Horizontal</option><option>Vertical</option></DecisionSelect></CompactField>
+                <CompactField label="Lighting"><DecisionSelect value={attrs.lighting} disabled={readOnly} onChange={value => setAttrs(a => ({ ...a, lighting: value as PointAttrs['lighting'] }))}><option value="">Select</option><option>Frontlit</option><option>Backlit</option><option>No lighting</option></DecisionSelect></CompactField>
                 <CompactField label="Other billboards within 50 m" missing={false}><div style={{ minHeight: 36, fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>{nearby.length}{nearby.slice(0, 3).map(n => <Badge key={n.id}>{n.code}</Badge>)}</div></CompactField>
               </div>}
             </div>
 
             {corrections.length > 0 && <div style={{ marginTop: '10px', padding: '9px', borderRadius: 'var(--radius)', background: PRIMARY_TINT, border: `1px solid ${PRIMARY_BORDER}` }}><div style={{ fontSize: '11px', fontWeight: 650, marginBottom: '6px' }}>QC corrections</div><DiffList diffs={corrections} /></div>}
+            {editMode && !readOnly && <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+              {ad.state === 'rejected' && <label style={{ ...cardStyle, padding: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={overturn} onChange={e => setOverturn(e.target.checked)} style={{ accentColor: PRIMARY }} /> Overturn rejection and approve this ad
+              </label>}
+            </div>}
           </div>
           <div className="qc-decision-footer">
-            <div style={{ fontSize: '10px', color: brandMissing || moveError ? RED : 'var(--muted-foreground)', marginBottom: '7px' }}>{brandMissing || moveError ? 'Resolve the fields marked in red before saving.' : moveTarget && moveTo ? `Photo will move to ${moveTarget.code} · ${moveTarget.attrs.street}. ` : 'Saving releases this ad and claims the next one in the queue. '}<span style={{ whiteSpace: 'nowrap' }}>Enter = Save · R = Reject</span></div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <Btn variant="danger" disabled={readOnly} onClick={() => setRejectDialogOpen(true)}><XCircle size={14} /> Reject</Btn>
-              <Btn variant="primary" disabled={readOnly || brandMissing || !!moveError || saving} onClick={onSave} style={{ flex: 1 }}><Save size={14} /> {saving ? 'Saving…' : 'Save & take next'}</Btn>
-              <div style={{ position: 'relative' }}>
-                <Btn title="More actions" disabled={readOnly} onClick={() => setMoveOpen(v => !v)}><MoreHorizontal size={17} /></Btn>
-                {moveOpen && <div style={{ position: 'absolute', zIndex: 20, bottom: '42px', right: 0, minWidth: '220px', padding: '5px', ...cardStyle, boxShadow: '0 8px 24px rgba(0,0,0,.15)' }}><button onClick={() => { setMoveOpen(false); onMove(); }} style={{ width: '100%', border: 0, background: 'none', textAlign: 'left', padding: '9px 10px', borderRadius: 'var(--radius)', font: `13px ${FONT}`, color: 'var(--foreground)', cursor: 'pointer' }}>Move to another billboard…</button></div>}
+            {viewOnly ? <>
+              <div style={{ fontSize: '10px', color: 'var(--muted-foreground)', marginBottom: '7px' }}>
+                {ad.state === 'rejected' ? `Rejected: ${ad.rejectReason ?? 'No reason recorded'}` : `Verified by ${ad.qc?.by ?? 'QC'} · ${ad.qc ? fmtDateTime(ad.qc.at) : 'time unavailable'}`}
               </div>
-            </div>
+              <Btn variant="primary" onClick={onEdit} style={{ width: '100%' }}><Pencil size={14} /> Edit QC result</Btn>
+            </> : editMode ? <>
+              <div style={{ fontSize: '10px', color: 'var(--muted-foreground)', marginBottom: '7px' }}>
+                {editDiffs.length === 0 ? 'Change at least one field to save.' : `${editDiffs.length} change${editDiffs.length === 1 ? '' : 's'} ready to save.`}
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <Btn onClick={onPause} style={{ flex: 1 }}>Cancel</Btn>
+                <Btn variant="primary" disabled={editSaveDisabled} onClick={onSaveEdit} style={{ flex: 1 }}><Save size={14} /> Save changes</Btn>
+              </div>
+            </> : <>
+              <div style={{ fontSize: '10px', color: brandMissing || moveError ? RED : 'var(--muted-foreground)', marginBottom: '7px' }}>{brandMissing || moveError ? 'Resolve the fields marked in red before saving.' : moveTarget && moveTo ? `Photo will move to ${moveTarget.code} · ${moveTarget.attrs.street}. ` : 'Saving releases this ad and claims the next one in the queue. '}<span style={{ whiteSpace: 'nowrap' }}>Enter = Save · R = Reject</span></div>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <Btn variant="danger" disabled={readOnly} onClick={() => setRejectDialogOpen(true)}><XCircle size={14} /> Reject</Btn>
+                <Btn variant="primary" disabled={readOnly || brandMissing || !!moveError || saving} onClick={onSave} style={{ flex: 1 }}><Save size={14} /> {saving ? 'Saving…' : 'Save & take next'}</Btn>
+                <div style={{ position: 'relative' }}>
+                  <Btn title="More actions" disabled={readOnly} onClick={() => setMoveOpen(v => !v)}><MoreHorizontal size={17} /></Btn>
+                  {moveOpen && <div style={{ position: 'absolute', zIndex: 20, bottom: '42px', right: 0, minWidth: '220px', padding: '5px', ...cardStyle, boxShadow: '0 8px 24px rgba(0,0,0,.15)' }}><button onClick={() => { setMoveOpen(false); onMove(); }} style={{ width: '100%', border: 0, background: 'none', textAlign: 'left', padding: '9px 10px', borderRadius: 'var(--radius)', font: `13px ${FONT}`, color: 'var(--foreground)', cursor: 'pointer' }}>Move to another billboard…</button></div>}
+                </div>
+              </div>
+            </>}
           </div>
         </aside>
       </div>
@@ -1096,12 +1125,8 @@ function DecisionField({ label, shortcut, oldValue, children, noBorder = false }
   </div>;
 }
 
-function CompactField({ label, missing, children }: { label: string; missing: boolean; children: ReactNode }) {
-  return <label style={{ minWidth: 0 }}><span style={{ display: 'block', fontSize: '9px', color: missing ? RED : 'var(--muted-foreground)', marginBottom: '4px', fontWeight: 650 }}>{label}{missing ? ' · REQUIRED' : ''}</span>{children}</label>;
-}
-
-function missingStyle(missing: boolean): CSSProperties {
-  return { ...inputStyle, height: '36px', borderColor: missing ? RED : 'var(--border)', background: missing ? RED_TINT : 'var(--input-background)', minWidth: 0 };
+function CompactField({ label, children }: { label: string; children: ReactNode }) {
+  return <label style={{ minWidth: 0 }}><span style={{ display: 'block', fontSize: '9px', color: 'var(--muted-foreground)', marginBottom: '4px', fontWeight: 650 }}>{label}</span>{children}</label>;
 }
 
 const linkBtn: CSSProperties = { border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: PRIMARY, fontFamily: FONT, fontSize: '13px', fontWeight: 600, textDecoration: 'underline' };
